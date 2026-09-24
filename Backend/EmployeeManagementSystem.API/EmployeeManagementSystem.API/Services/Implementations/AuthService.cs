@@ -114,6 +114,9 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             var response = new LoginResponseDto
             {
                 Token = tokenResult.Token,
+                UserId = user.Id,
+                Email = user.Email ?? string.Empty,
+                Role = authUser.Role,
                 ExpiresAt = tokenResult.ExpiresAt,
                 User = authUser
             };
@@ -159,6 +162,13 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             {
                 claims.Add(new Claim(ClaimTypes.Role, role));
                 claims.Add(new Claim("role", role));
+
+                var upperRole = role.ToUpperInvariant();
+                if (!string.Equals(role, upperRole, StringComparison.Ordinal))
+                {
+                    claims.Add(new Claim(ClaimTypes.Role, upperRole));
+                    claims.Add(new Claim("role", upperRole));
+                }
             }
 
             var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));

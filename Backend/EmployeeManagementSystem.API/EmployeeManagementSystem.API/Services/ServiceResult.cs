@@ -5,7 +5,8 @@ namespace EmployeeManagementSystem.API.Services
         Success,
         NotFound,
         BadRequest,
-        Conflict
+        Conflict,
+        InternalError
     }
 
     public class ServiceResult<T>
@@ -34,6 +35,11 @@ namespace EmployeeManagementSystem.API.Services
         public static ServiceResult<T> Conflict(string message)
         {
             return new ServiceResult<T> { Status = ServiceResultStatus.Conflict, Message = message };
+        }
+
+        public static ServiceResult<T> InternalError(string message)
+        {
+            return new ServiceResult<T> { Status = ServiceResultStatus.InternalError, Message = message };
         }
     }
 }

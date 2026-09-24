@@ -73,16 +73,16 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(AppPolicies.EmployeeRead, policy =>
-        policy.RequireRole(AppRoles.Admin, AppRoles.HR, AppRoles.Manager, AppRoles.Employee));
+        policy.RequireRole(AppRoles.Admin, AppRoles.HR, AppRoles.Manager, AppRoles.Employee, "ADMIN", "HR", "MANAGER", "EMPLOYEE"));
 
     options.AddPolicy(AppPolicies.EmployeeCreate, policy =>
-        policy.RequireRole(AppRoles.Admin, AppRoles.HR));
+        policy.RequireRole(AppRoles.Admin, AppRoles.HR, "ADMIN", "HR"));
 
     options.AddPolicy(AppPolicies.EmployeeUpdate, policy =>
-        policy.RequireRole(AppRoles.Admin, AppRoles.HR));
+        policy.RequireRole(AppRoles.Admin, AppRoles.HR, "ADMIN", "HR"));
 
     options.AddPolicy(AppPolicies.EmployeeDelete, policy =>
-        policy.RequireRole(AppRoles.Admin));
+        policy.RequireRole(AppRoles.Admin, "ADMIN"));
 });
 
 // =========================================================================
@@ -159,19 +159,9 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // =========================================================================
-// Identity Role Seeding
+// Database Migration & Seed Data (Roles, Departments, Admin User)
 // =========================================================================
-using (var scope = app.Services.CreateScope())
-{
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-    foreach (var roleName in AppRoles.All)
-    {
-        if (!await roleManager.RoleExistsAsync(roleName))
-        {
-            await roleManager.CreateAsync(new IdentityRole(roleName));
-        }
-    }
-}
+await DatabaseSeeder.SeedDatabaseAsync(app.Services, app.Configuration);
 
 // =========================================================================
 // 9. HTTP Pipeline Configuration
@@ -188,9 +178,20 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
-
+// CORS must be applied before any redirect/auth middleware so that
+// preflight OPTIONS requests always receive Access-Control headers.
 app.UseCors("ReactFrontend");
+
+// Only redirect HTTP → HTTPS when the application is actually listening on
+// an HTTPS endpoint. When running the "http" launch profile (no SSL port
+// configured) this middleware cannot determine a redirect target and logs
+// "Failed to determine the https port" — which causes Swagger "Failed to
+// fetch" errors. Checking for a bound HTTPS address avoids this.
+var httpsAddress = app.Urls.FirstOrDefault(u => u.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+if (httpsAddress is not null)
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -11,6 +11,7 @@ namespace EmployeeManagementSystem.API.Controllers
     [ApiController]
     [Route("api/auth")]
     [Produces("application/json")]
+    [Tags("Authentication")]
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
@@ -18,17 +19,6 @@ namespace EmployeeManagementSystem.API.Controllers
         public AuthController(IAuthService authService)
         {
             _authService = authService;
-        }
-
-        [AllowAnonymous]
-        [HttpPost("register")]
-        [ProducesResponseType(typeof(ApiResponse<AuthUserDto>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<AuthUserDto>), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ApiResponse<AuthUserDto>), StatusCodes.Status409Conflict)]
-        public async Task<ActionResult<ApiResponse<AuthUserDto>>> Register(RegisterRequestDto dto, CancellationToken cancellationToken)
-        {
-            var result = await _authService.RegisterAsync(dto, cancellationToken);
-            return ToActionResult(result);
         }
 
         [AllowAnonymous]

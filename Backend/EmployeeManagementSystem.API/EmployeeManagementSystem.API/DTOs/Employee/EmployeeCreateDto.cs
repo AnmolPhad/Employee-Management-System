@@ -46,5 +46,11 @@ namespace EmployeeManagementSystem.API.DTOs.Employee
 
         [Required]
         public EmploymentStatus EmploymentStatus { get; set; }
+
+        /// <summary>
+        /// Initial password for the employee account. Defaults to 'Employee@123' if omitted.
+        /// </summary>
+        [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be at least 6 characters long.")]
+        public string? Password { get; set; }
     }
 }

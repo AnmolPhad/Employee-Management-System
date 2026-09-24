@@ -1,8 +1,11 @@
+using EmployeeManagementSystem.API.Authorization;
 using EmployeeManagementSystem.API.Data;
 using EmployeeManagementSystem.API.DTOs;
 using EmployeeManagementSystem.API.DTOs.Employee;
+using EmployeeManagementSystem.API.Models;
 using EmployeeManagementSystem.API.Models.Enums;
 using EmployeeManagementSystem.API.Services.Interfaces;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using EmployeeEntity = EmployeeManagementSystem.API.Models.Employee;
 
@@ -11,10 +14,20 @@ namespace EmployeeManagementSystem.API.Services.Implementations
     public class EmployeeService : IEmployeeService
     {
         private readonly ApplicationDbContext _context;
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly ILogger<EmployeeService> _logger;
 
-        public EmployeeService(ApplicationDbContext context)
+        public EmployeeService(
+            ApplicationDbContext context,
+            UserManager<ApplicationUser> userManager,
+            RoleManager<IdentityRole> roleManager,
+            ILogger<EmployeeService> logger)
         {
             _context = context;
+            _userManager = userManager;
+            _roleManager = roleManager;
+            _logger = logger;
         }
 
         public async Task<ServiceResult<PagedResponse<EmployeeResponseDto>>> GetEmployeesAsync(
@@ -127,6 +140,31 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 : ServiceResult<EmployeeResponseDto>.Success(employee, "Employee retrieved successfully.");
         }
 
+        public async Task<ServiceResult<EmployeeResponseDto>> GetMyProfileAsync(string userId, CancellationToken cancellationToken = default)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user is null)
+            {
+                return ServiceResult<EmployeeResponseDto>.NotFound("User account was not found.");
+            }
+
+            int? employeeId = user.EmployeeId;
+            if (!employeeId.HasValue)
+            {
+                var emp = await _context.Employees
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(e => e.UserId == userId || e.Email == user.Email, cancellationToken);
+                employeeId = emp?.EmployeeId;
+            }
+
+            if (!employeeId.HasValue)
+            {
+                return ServiceResult<EmployeeResponseDto>.NotFound("No employee profile is linked to this user account.");
+            }
+
+            return await GetEmployeeByIdAsync(employeeId.Value, cancellationToken);
+        }
+
         public async Task<ServiceResult<EmployeeResponseDto>> CreateEmployeeAsync(EmployeeCreateDto dto, CancellationToken cancellationToken = default)
         {
             var validationResult = await ValidateEmployeeDtoAsync(dto.EmployeeCode, dto.Email, dto.DepartmentId, dto.RoleId, dto.ManagerId, dto.DateOfBirth, dto.DateOfJoining, dto.Gender, dto.EmploymentStatus, null, cancellationToken);
@@ -137,29 +175,75 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                     : ServiceResult<EmployeeResponseDto>.BadRequest(validationResult.Message);
             }
 
-            var employee = new EmployeeEntity
+            using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                EmployeeCode = dto.EmployeeCode.Trim(),
-                FirstName = dto.FirstName.Trim(),
-                LastName = dto.LastName.Trim(),
-                Email = dto.Email.Trim(),
-                Phone = string.IsNullOrWhiteSpace(dto.Phone) ? null : dto.Phone.Trim(),
-                DateOfBirth = dto.DateOfBirth,
-                Gender = dto.Gender,
-                Address = string.IsNullOrWhiteSpace(dto.Address) ? null : dto.Address.Trim(),
-                DateOfJoining = dto.DateOfJoining.Date,
-                DepartmentId = dto.DepartmentId,
-                RoleId = dto.RoleId,
-                ManagerId = dto.ManagerId,
-                EmploymentStatus = dto.EmploymentStatus,
-                CreatedAt = DateTime.UtcNow
-            };
+                var employee = new EmployeeEntity
+                {
+                    EmployeeCode = dto.EmployeeCode.Trim(),
+                    FirstName = dto.FirstName.Trim(),
+                    LastName = dto.LastName.Trim(),
+                    Email = dto.Email.Trim(),
+                    Phone = string.IsNullOrWhiteSpace(dto.Phone) ? null : dto.Phone.Trim(),
+                    DateOfBirth = dto.DateOfBirth,
+                    Gender = dto.Gender,
+                    Address = string.IsNullOrWhiteSpace(dto.Address) ? null : dto.Address.Trim(),
+                    DateOfJoining = dto.DateOfJoining.Date,
+                    DepartmentId = dto.DepartmentId,
+                    RoleId = dto.RoleId,
+                    ManagerId = dto.ManagerId,
+                    EmploymentStatus = dto.EmploymentStatus,
+                    CreatedAt = DateTime.UtcNow
+                };
 
-            _context.Employees.Add(employee);
-            await _context.SaveChangesAsync(cancellationToken);
+                _context.Employees.Add(employee);
+                await _context.SaveChangesAsync(cancellationToken);
 
-            var createdEmployee = await GetEmployeeByIdAsync(employee.EmployeeId, cancellationToken);
-            return ServiceResult<EmployeeResponseDto>.Success(createdEmployee.Data!, "Employee created successfully.");
+                var normalizedEmail = dto.Email.Trim();
+                var identityUser = new ApplicationUser
+                {
+                    UserName = normalizedEmail,
+                    Email = normalizedEmail,
+                    EmailConfirmed = true,
+                    EmployeeId = employee.EmployeeId
+                };
+
+                var password = string.IsNullOrWhiteSpace(dto.Password) ? "Employee@123" : dto.Password.Trim();
+                var userCreateResult = await _userManager.CreateAsync(identityUser, password);
+                if (!userCreateResult.Succeeded)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    var errors = string.Join(" ", userCreateResult.Errors.Select(e => e.Description));
+                    return ServiceResult<EmployeeResponseDto>.BadRequest($"Failed to create employee user account: {errors}");
+                }
+
+                if (!await _roleManager.RoleExistsAsync(AppRoles.Employee))
+                {
+                    await _roleManager.CreateAsync(new IdentityRole(AppRoles.Employee));
+                }
+
+                var addRoleResult = await _userManager.AddToRoleAsync(identityUser, AppRoles.Employee);
+                if (!addRoleResult.Succeeded)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    var errors = string.Join(" ", addRoleResult.Errors.Select(e => e.Description));
+                    return ServiceResult<EmployeeResponseDto>.BadRequest($"Failed to assign Employee role: {errors}");
+                }
+
+                employee.UserId = identityUser.Id;
+                await _context.SaveChangesAsync(cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+
+                var createdEmployee = await GetEmployeeByIdAsync(employee.EmployeeId, cancellationToken);
+                return ServiceResult<EmployeeResponseDto>.Success(createdEmployee.Data!, "Employee created successfully.");
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogError(ex, "Transaction failed while creating employee {EmployeeCode}.", dto.EmployeeCode);
+                return ServiceResult<EmployeeResponseDto>.InternalError("An unexpected error occurred while creating the employee.");
+            }
         }
 
         public async Task<ServiceResult<EmployeeResponseDto>> UpdateEmployeeAsync(int id, EmployeeUpdateDto dto, CancellationToken cancellationToken = default)
@@ -195,6 +279,15 @@ namespace EmployeeManagementSystem.API.Services.Implementations
 
             await _context.SaveChangesAsync(cancellationToken);
 
+            // Also synchronize email with linked Identity user if applicable
+            var linkedUser = await _userManager.Users.FirstOrDefaultAsync(u => u.EmployeeId == id, cancellationToken);
+            if (linkedUser is not null && !string.Equals(linkedUser.Email, dto.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                linkedUser.Email = dto.Email.Trim();
+                linkedUser.UserName = dto.Email.Trim();
+                await _userManager.UpdateAsync(linkedUser);
+            }
+
             var updatedEmployee = await GetEmployeeByIdAsync(id, cancellationToken);
             return ServiceResult<EmployeeResponseDto>.Success(updatedEmployee.Data!, "Employee updated successfully.");
         }
@@ -213,10 +306,32 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 return ServiceResult<bool>.Conflict(deleteBlockReason);
             }
 
-            _context.Employees.Remove(employee);
-            await _context.SaveChangesAsync(cancellationToken);
+            using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var linkedUser = await _userManager.Users.FirstOrDefaultAsync(u => u.EmployeeId == id, cancellationToken);
+                if (linkedUser is not null)
+                {
+                    var userDeleteResult = await _userManager.DeleteAsync(linkedUser);
+                    if (!userDeleteResult.Succeeded)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                        return ServiceResult<bool>.BadRequest("Failed to delete linked user account.");
+                    }
+                }
 
-            return ServiceResult<bool>.Success(true, "Employee deleted successfully.");
+                _context.Employees.Remove(employee);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+                return ServiceResult<bool>.Success(true, "Employee deleted successfully.");
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogError(ex, "Failed to delete employee {EmployeeId}.", id);
+                return ServiceResult<bool>.InternalError("An unexpected error occurred while deleting the employee.");
+            }
         }
 
         private async Task<ServiceResult<bool>> ValidateEmployeeDtoAsync(
@@ -281,6 +396,15 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             if (duplicateEmailExists)
             {
                 return ServiceResult<bool>.Conflict("An employee with this email already exists.");
+            }
+
+            var duplicateUserEmailExists = await _userManager.Users.AnyAsync(u =>
+                u.Email == normalizedEmail &&
+                (!currentEmployeeId.HasValue || u.EmployeeId != currentEmployeeId.Value), cancellationToken);
+
+            if (duplicateUserEmailExists)
+            {
+                return ServiceResult<bool>.Conflict("A user account with this email already exists.");
             }
 
             var departmentExists = await _context.Departments.AnyAsync(d => d.DepartmentId == departmentId, cancellationToken);
@@ -357,11 +481,6 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             if (await _context.Tickets.AnyAsync(t => t.EmployeeId == employeeId || t.AssignedToId == employeeId, cancellationToken))
             {
                 return "Employee cannot be deleted because tickets reference this employee.";
-            }
-
-            if (await _context.Users.AnyAsync(u => u.EmployeeId == employeeId, cancellationToken))
-            {
-                return "Employee cannot be deleted because an application user account is linked to this employee.";
             }
 
             return null;

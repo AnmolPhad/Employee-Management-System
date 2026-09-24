@@ -4,6 +4,7 @@ namespace EmployeeManagementSystem.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Tags("Health")]
     public class HealthController : ControllerBase
     {
         [HttpGet]
