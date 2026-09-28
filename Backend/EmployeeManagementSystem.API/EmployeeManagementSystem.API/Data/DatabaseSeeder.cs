@@ -63,7 +63,7 @@ namespace EmployeeManagementSystem.API.Data
                         new() { RoleName = "System Administrator", Description = "Full administrative access across all systems", IsActive = true, CreatedAt = DateTime.UtcNow },
                         new() { RoleName = "Software Engineer", Description = "Software design, coding and testing", IsActive = true, CreatedAt = DateTime.UtcNow },
                         new() { RoleName = "HR Specialist", Description = "Onboarding, leave administration and employee engagement", IsActive = true, CreatedAt = DateTime.UtcNow },
-                        new() { RoleName = "Project Manager", Description = "Project delivery, resource allocation and sprint planning", IsActive = true, CreatedAt = DateTime.UtcNow },
+                        new() { RoleName = "Technical Lead", Description = "Technical guidance, code review and architecture", IsActive = true, CreatedAt = DateTime.UtcNow },
                         new() { RoleName = "Financial Analyst", Description = "Budget analysis, reporting and audit", IsActive = true, CreatedAt = DateTime.UtcNow }
                     };
 

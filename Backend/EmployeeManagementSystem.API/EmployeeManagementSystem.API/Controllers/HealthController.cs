@@ -18,5 +18,11 @@ namespace EmployeeManagementSystem.API.Controllers
                 version = "1.0.0"
             });
         }
+
+        [HttpGet("test-error")]
+        public IActionResult TriggerTestError()
+        {
+            throw new InvalidOperationException("Test exception triggered to verify Serilog error logging and ExceptionHandlingMiddleware.");
+        }
     }
 }

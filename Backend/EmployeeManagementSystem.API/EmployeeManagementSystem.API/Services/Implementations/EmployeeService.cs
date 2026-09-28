@@ -448,16 +448,6 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 return "Employee cannot be deleted because they are assigned as a department head.";
             }
 
-            if (await _context.Projects.AnyAsync(p => p.ProjectManagerId == employeeId, cancellationToken))
-            {
-                return "Employee cannot be deleted because they are assigned as a project manager.";
-            }
-
-            if (await _context.ProjectAssignments.AnyAsync(pa => pa.EmployeeId == employeeId, cancellationToken))
-            {
-                return "Employee cannot be deleted because project assignments exist for this employee.";
-            }
-
             if (await _context.Attendances.AnyAsync(a => a.EmployeeId == employeeId, cancellationToken))
             {
                 return "Employee cannot be deleted because attendance history exists for this employee.";

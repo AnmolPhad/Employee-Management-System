@@ -10,14 +10,51 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-
-var builder = WebApplication.CreateBuilder(args);
+using Serilog;
+using Serilog.Events;
 
 // =========================================================================
-// 1. Database Configuration (SQL Server)
+// Early Bootstrap Logger (captures startup / pre-host initialization errors)
 // =========================================================================
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .CreateBootstrapLogger();
+
+try
+{
+    Log.Information("Starting Employee Management System Web API...");
+
+    var builder = WebApplication.CreateBuilder(args);
+
+    // =========================================================================
+    // Serilog Host Configuration (Reads appsettings, outputs to Console & Daily File)
+    // =========================================================================
+    builder.Host.UseSerilog((context, services, configuration) =>
+    {
+        var logDirectory = Path.Combine(context.HostingEnvironment.ContentRootPath, "Logs");
+        var logPath = Path.Combine(logDirectory, "application-.log");
+        const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
+
+        configuration
+            .ReadFrom.Configuration(context.Configuration)
+            .ReadFrom.Services(services)
+            .Enrich.FromLogContext()
+            .WriteTo.Console(outputTemplate: outputTemplate)
+            .WriteTo.File(
+                path: logPath,
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 30,
+                flushToDiskInterval: TimeSpan.FromSeconds(1),
+                outputTemplate: outputTemplate);
+    });
+
+    // =========================================================================
+    // 1. Database Configuration (SQL Server)
+    // =========================================================================
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
@@ -115,6 +152,7 @@ builder.Services.AddControllers()
 // 7. Application Services
 // =========================================================================
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // =========================================================================
@@ -198,4 +236,15 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly during startup.");
+    throw;
+}
+finally
+{
+    Log.Information("Shutting down Employee Management System Web API...");
+    Log.CloseAndFlush();
+}

@@ -17,21 +17,6 @@ namespace EmployeeManagementSystem.API.Models.Enums
         Other = 3
     }
 
-    public enum ProjectStatus
-    {
-        Planned = 1,
-        Active = 2,
-        Completed = 3,
-        Cancelled = 4
-    }
-
-    public enum ProjectAssignmentStatus
-    {
-        Active = 1,
-        Inactive = 2,
-        Completed = 3
-    }
-
     public enum AttendanceStatus
     {
         Present = 1,

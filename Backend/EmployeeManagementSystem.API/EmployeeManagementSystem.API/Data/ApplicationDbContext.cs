@@ -17,8 +17,6 @@ namespace EmployeeManagementSystem.API.Data
         public DbSet<Role> AppRoles { get; set; }
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
-        public DbSet<Project> Projects { get; set; }
-        public DbSet<ProjectAssignment> ProjectAssignments { get; set; }
         public DbSet<Attendance> Attendances { get; set; }
         public DbSet<Leave> Leaves { get; set; }
         public DbSet<LeaveType> LeaveTypes { get; set; }
@@ -164,50 +162,6 @@ namespace EmployeeManagementSystem.API.Data
 
                 entity.HasIndex(rp => new { rp.RoleId, rp.PermissionId })
                       .IsUnique();
-            });
-
-            // Project
-            modelBuilder.Entity<Project>(entity =>
-            {
-                entity.HasKey(p => p.ProjectId);
-
-                entity.Property(p => p.ProjectName)
-                      .IsRequired()
-                      .HasMaxLength(150);
-
-                entity.Property(p => p.Description)
-                      .IsRequired(false)
-                      .HasMaxLength(1000);
-
-                entity.Property(p => p.StartDate)
-                      .IsRequired();
-
-                entity.Property(p => p.EndDate)
-                      .IsRequired(false);
-
-                entity.Property(p => p.CreatedAt)
-                      .IsRequired();
-
-                entity.Property(p => p.UpdatedAt)
-                      .IsRequired(false);
-            });
-
-            // ProjectAssignment
-            modelBuilder.Entity<ProjectAssignment>(entity =>
-            {
-                entity.HasKey(pa => pa.ProjectAssignmentId);
-
-                entity.HasIndex(pa => new { pa.ProjectId, pa.EmployeeId });
-
-                entity.Property(pa => pa.RoleInProject)
-                      .IsRequired()
-                      .HasMaxLength(100);
-
-                entity.Property(pa => pa.StartDate)
-                      .IsRequired();
-
-                entity.Property(pa => pa.EndDate)
-                      .IsRequired(false);
             });
 
             // Attendance
@@ -417,34 +371,6 @@ namespace EmployeeManagementSystem.API.Data
                 .HasOne(d => d.DepartmentHead)
                 .WithMany()
                 .HasForeignKey(d => d.DepartmentHeadId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Project -> Department
-            modelBuilder.Entity<Project>()
-                .HasOne(p => p.Department)
-                .WithMany(d => d.Projects)
-                .HasForeignKey(p => p.DepartmentId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Project -> ProjectManager
-            modelBuilder.Entity<Project>()
-                .HasOne(p => p.ProjectManager)
-                .WithMany(e => e.ManagedProjects)
-                .HasForeignKey(p => p.ProjectManagerId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // ProjectAssignment -> Project
-            modelBuilder.Entity<ProjectAssignment>()
-                .HasOne(pa => pa.Project)
-                .WithMany(p => p.Assignments)
-                .HasForeignKey(pa => pa.ProjectId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // ProjectAssignment -> Employee
-            modelBuilder.Entity<ProjectAssignment>()
-                .HasOne(pa => pa.Employee)
-                .WithMany(e => e.ProjectAssignments)
-                .HasForeignKey(pa => pa.EmployeeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // Attendance -> Employee

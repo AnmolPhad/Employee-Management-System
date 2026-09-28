@@ -88,8 +88,6 @@ namespace EmployeeManagementSystem.API.Models
 
         // Navigation collections
         public virtual ICollection<Employee> Subordinates { get; set; } = new List<Employee>();
-        public virtual ICollection<ProjectAssignment> ProjectAssignments { get; set; } = new List<ProjectAssignment>();
-        public virtual ICollection<Project> ManagedProjects { get; set; } = new List<Project>();
         public virtual ICollection<Attendance> Attendances { get; set; } = new List<Attendance>();
         public virtual ICollection<Leave> Leaves { get; set; } = new List<Leave>();
         public virtual ICollection<Leave> ApprovedLeaves { get; set; } = new List<Leave>();
