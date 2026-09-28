@@ -37,7 +37,6 @@ Once running:
 
 ### Run Automated Tests
 ```bash
-cd C:\Users\shubhama\.gemini\antigravity\scratch\hrms-api
 dotnet test
 ```
 
