@@ -27,7 +27,6 @@ hrms-api/
 
 ### Run the API
 ```bash
-cd C:\Users\shubhama\.gemini\antigravity\scratch\hrms-api\src\HRMS.API
 dotnet run
 ```
 
