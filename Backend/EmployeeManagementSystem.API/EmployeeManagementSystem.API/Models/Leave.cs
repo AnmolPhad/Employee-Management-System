@@ -60,5 +60,8 @@ namespace EmployeeManagementSystem.API.Models
         [StringLength(500, ErrorMessage = "Rejection Reason cannot exceed 500 characters.")]
         [Display(Name = "Rejection Reason")]
         public string? RejectionReason { get; set; }
+
+        // Navigation properties
+        public virtual ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
     }
 }

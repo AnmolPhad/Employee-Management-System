@@ -304,6 +304,47 @@ namespace EmployeeManagementSystem.API.Migrations
                     b.ToTable("Employees");
                 });
 
+            modelBuilder.Entity("EmployeeManagementSystem.API.Models.Holiday", b =>
+                {
+                    b.Property<int>("HolidayId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("HolidayId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("HolidayDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("HolidayName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("HolidayId");
+
+                    b.HasIndex("HolidayDate")
+                        .IsUnique();
+
+                    b.ToTable("Holidays");
+                });
+
             modelBuilder.Entity("EmployeeManagementSystem.API.Models.Leave", b =>
                 {
                     b.Property<int>("LeaveId")
@@ -372,6 +413,9 @@ namespace EmployeeManagementSystem.API.Migrations
                         .HasColumnType("nvarchar(250)");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPaid")
                         .HasColumnType("bit");
 
                     b.Property<string>("LeaveTypeName")
@@ -536,6 +580,10 @@ namespace EmployeeManagementSystem.API.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("AnnualCTC")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("BasicSalary")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -560,14 +608,58 @@ namespace EmployeeManagementSystem.API.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("PFAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("PFPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.HasKey("SalaryId");
 
                     b.HasIndex("EmployeeId");
 
                     b.ToTable("Salaries");
+                });
+
+            modelBuilder.Entity("EmployeeManagementSystem.API.Models.SalaryCalculationSettings", b =>
+                {
+                    b.Property<int>("SettingsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SettingsId"));
+
+                    b.Property<decimal>("PFPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("SalaryCycle")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal>("UnpaidLeaveDivisor")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("SettingsId");
+
+                    b.ToTable("SalaryCalculationSettings");
                 });
 
             modelBuilder.Entity("EmployeeManagementSystem.API.Models.Ticket", b =>
@@ -577,6 +669,9 @@ namespace EmployeeManagementSystem.API.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TicketId"));
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<int?>("AssignedToId")
                         .HasColumnType("int");
@@ -600,8 +695,18 @@ namespace EmployeeManagementSystem.API.Migrations
                     b.Property<int>("EmployeeId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("LeaveId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Priority")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("RejectedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -619,6 +724,8 @@ namespace EmployeeManagementSystem.API.Migrations
                     b.HasIndex("AssignedToId");
 
                     b.HasIndex("EmployeeId");
+
+                    b.HasIndex("LeaveId");
 
                     b.ToTable("Tickets");
                 });
@@ -910,9 +1017,16 @@ namespace EmployeeManagementSystem.API.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("EmployeeManagementSystem.API.Models.Leave", "Leave")
+                        .WithMany("Tickets")
+                        .HasForeignKey("LeaveId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AssignedTo");
 
                     b.Navigation("Employee");
+
+                    b.Navigation("Leave");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -997,6 +1111,11 @@ namespace EmployeeManagementSystem.API.Migrations
                     b.Navigation("Tickets");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EmployeeManagementSystem.API.Models.Leave", b =>
+                {
+                    b.Navigation("Tickets");
                 });
 
             modelBuilder.Entity("EmployeeManagementSystem.API.Models.LeaveType", b =>

@@ -22,8 +22,10 @@ namespace EmployeeManagementSystem.API.Models.Enums
         Present = 1,
         Absent = 2,
         HalfDay = 3,
+        OnLeave = 4,
         Leave = 4,
-        Holiday = 5
+        Holiday = 5,
+        WeekOff = 6
     }
 
     public enum LeaveStatus
@@ -51,9 +53,12 @@ namespace EmployeeManagementSystem.API.Models.Enums
 
     public enum TicketStatus
     {
+        Pending = 1,
+        Approved = 2,
+        Rejected = 3,
         Open = 1,
-        InProgress = 2,
-        Resolved = 3,
-        Closed = 4
+        InProgress = 4,
+        Resolved = 5,
+        Closed = 6
     }
 }

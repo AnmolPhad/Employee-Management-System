@@ -149,11 +149,19 @@ builder.Services.AddControllers()
     });
 
 // =========================================================================
-// 7. Application Services
+// 7. Application Services & Configuration
 // =========================================================================
+builder.Services.Configure<OrganizationSettings>(builder.Configuration.GetSection("OrganizationSettings"));
+
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ILeaveService, LeaveService>();
+builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
+builder.Services.AddScoped<IHolidayService, HolidayService>();
+builder.Services.AddScoped<IAttendanceService, AttendanceService>();
+builder.Services.AddScoped<ISalaryService, SalaryService>();
+builder.Services.AddScoped<ITicketService, TicketService>();
 
 // =========================================================================
 // 8. Swagger / OpenAPI Configuration

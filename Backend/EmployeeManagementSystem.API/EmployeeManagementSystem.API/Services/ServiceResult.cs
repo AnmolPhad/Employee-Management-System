@@ -6,6 +6,8 @@ namespace EmployeeManagementSystem.API.Services
         NotFound,
         BadRequest,
         Conflict,
+        Forbidden,
+        Unauthorized,
         InternalError
     }
 
@@ -35,6 +37,16 @@ namespace EmployeeManagementSystem.API.Services
         public static ServiceResult<T> Conflict(string message)
         {
             return new ServiceResult<T> { Status = ServiceResultStatus.Conflict, Message = message };
+        }
+
+        public static ServiceResult<T> Forbidden(string message)
+        {
+            return new ServiceResult<T> { Status = ServiceResultStatus.Forbidden, Message = message };
+        }
+
+        public static ServiceResult<T> Unauthorized(string message)
+        {
+            return new ServiceResult<T> { Status = ServiceResultStatus.Unauthorized, Message = message };
         }
 
         public static ServiceResult<T> InternalError(string message)

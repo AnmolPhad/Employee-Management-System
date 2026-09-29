@@ -22,6 +22,13 @@ namespace EmployeeManagementSystem.API.Models
         [Display(Name = "Is Active")]
         public bool IsActive { get; set; } = true;
 
+        /// <summary>
+        /// Indicates whether this leave type is paid (no salary deduction)
+        /// or unpaid (salary deduction applies).
+        /// </summary>
+        [Display(Name = "Is Paid")]
+        public bool IsPaid { get; set; } = true;
+
         // Navigation properties
         public virtual ICollection<Leave> Leaves { get; set; } = new List<Leave>();
     }

@@ -20,7 +20,9 @@ namespace EmployeeManagementSystem.API.Data
         public DbSet<Attendance> Attendances { get; set; }
         public DbSet<Leave> Leaves { get; set; }
         public DbSet<LeaveType> LeaveTypes { get; set; }
+        public DbSet<Holiday> Holidays { get; set; }
         public DbSet<Salary> Salaries { get; set; }
+        public DbSet<SalaryCalculationSettings> SalaryCalculationSettings { get; set; }
         public DbSet<Performance> Performances { get; set; }
         public DbSet<Ticket> Tickets { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
@@ -223,12 +225,54 @@ namespace EmployeeManagementSystem.API.Data
                       .IsRequired(false);
             });
 
+            // Holiday
+            modelBuilder.Entity<Holiday>(entity =>
+            {
+                entity.HasKey(h => h.HolidayId);
+
+                entity.HasIndex(h => h.HolidayDate)
+                      .IsUnique();
+
+                entity.Property(h => h.HolidayName)
+                      .IsRequired()
+                      .HasMaxLength(100);
+
+                entity.Property(h => h.HolidayDate)
+                      .IsRequired();
+
+                entity.Property(h => h.Description)
+                      .IsRequired(false)
+                      .HasMaxLength(500);
+
+                entity.Property(h => h.CreatedBy)
+                      .IsRequired(false)
+                      .HasMaxLength(100);
+
+                entity.Property(h => h.CreatedAt)
+                      .IsRequired();
+
+                entity.Property(h => h.UpdatedAt)
+                      .IsRequired(false);
+            });
+
             // Salary
             modelBuilder.Entity<Salary>(entity =>
             {
                 entity.HasKey(s => s.SalaryId);
 
+                entity.Property(s => s.AnnualCTC)
+                      .IsRequired()
+                      .HasPrecision(18, 2);
+
                 entity.Property(s => s.BasicSalary)
+                      .IsRequired()
+                      .HasPrecision(18, 2);
+
+                entity.Property(s => s.PFPercentage)
+                      .IsRequired()
+                      .HasPrecision(5, 2);
+
+                entity.Property(s => s.PFAmount)
                       .IsRequired()
                       .HasPrecision(18, 2);
 
@@ -252,6 +296,34 @@ namespace EmployeeManagementSystem.API.Data
 
                 entity.Property(s => s.CreatedAt)
                       .IsRequired();
+
+                entity.Property(s => s.UpdatedAt)
+                      .IsRequired(false);
+            });
+
+            // SalaryCalculationSettings
+            modelBuilder.Entity<SalaryCalculationSettings>(entity =>
+            {
+                entity.HasKey(s => s.SettingsId);
+
+                entity.Property(s => s.SalaryCycle)
+                      .IsRequired()
+                      .HasMaxLength(50);
+
+                entity.Property(s => s.UnpaidLeaveDivisor)
+                      .IsRequired()
+                      .HasPrecision(5, 2);
+
+                entity.Property(s => s.PFPercentage)
+                      .IsRequired()
+                      .HasPrecision(5, 2);
+
+                entity.Property(s => s.UpdatedAt)
+                      .IsRequired(false);
+
+                entity.Property(s => s.UpdatedBy)
+                      .IsRequired(false)
+                      .HasMaxLength(100);
             });
 
             // Performance
@@ -295,6 +367,16 @@ namespace EmployeeManagementSystem.API.Data
                 entity.Property(t => t.Category)
                       .IsRequired()
                       .HasMaxLength(50);
+
+                entity.Property(t => t.RejectionReason)
+                      .IsRequired(false)
+                      .HasMaxLength(500);
+
+                entity.Property(t => t.ApprovedAt)
+                      .IsRequired(false);
+
+                entity.Property(t => t.RejectedAt)
+                      .IsRequired(false);
 
                 entity.Property(t => t.CreatedAt)
                       .IsRequired();
@@ -434,6 +516,13 @@ namespace EmployeeManagementSystem.API.Data
                 .HasOne(t => t.AssignedTo)
                 .WithMany(e => e.AssignedTickets)
                 .HasForeignKey(t => t.AssignedToId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Ticket -> Leave
+            modelBuilder.Entity<Ticket>()
+                .HasOne(t => t.Leave)
+                .WithMany(l => l.Tickets)
+                .HasForeignKey(t => t.LeaveId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // RolePermission -> Role
