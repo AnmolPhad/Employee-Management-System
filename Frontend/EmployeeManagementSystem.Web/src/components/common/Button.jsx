@@ -1,11 +1,15 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const Button = ({
   children,
+  as: Component = 'button',
+  to,
   type = 'button',
   variant = 'primary',
   size = 'md',
   isLoading = false,
+  loadingText,
   disabled = false,
   icon: Icon = null,
   onClick,
@@ -28,18 +32,33 @@ const Button = ({
     lg: 'text-base px-5 py-2.5 gap-2.5',
   };
 
+  const commonClasses = `${baseClasses} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${className}`;
+
+  if (to || Component === Link) {
+    return (
+      <Link
+        to={to}
+        className={commonClasses}
+        {...props}
+      >
+        {Icon && <Icon className="w-4 h-4 shrink-0" />}
+        {children}
+      </Link>
+    );
+  }
+
   return (
-    <button
+    <Component
       type={type}
       disabled={disabled || isLoading}
       onClick={onClick}
-      className={`${baseClasses} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${className}`}
+      className={commonClasses}
       {...props}
     >
       {isLoading ? (
         <>
           <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          <span>Processing...</span>
+          <span>{loadingText || 'Processing...'}</span>
         </>
       ) : (
         <>
@@ -47,7 +66,7 @@ const Button = ({
           {children}
         </>
       )}
-    </button>
+    </Component>
   );
 };
 

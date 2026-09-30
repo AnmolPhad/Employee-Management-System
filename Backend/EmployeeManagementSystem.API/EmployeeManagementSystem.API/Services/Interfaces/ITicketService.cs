@@ -60,6 +60,14 @@ namespace EmployeeManagementSystem.API.Services.Interfaces
             CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Approves all pending tickets assigned to the authenticated approver.
+        /// Synchronizes all corresponding Leave entities within a single database transaction.
+        /// </summary>
+        Task<ServiceResult<BulkTicketApprovalResultDto>> ApproveAllMyPendingTicketsAsync(
+            ClaimsPrincipal userPrincipal,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Rejects a pending ticket with a mandatory rejection reason. Only the assigned approver can reject it.
         /// Synchronizes the corresponding Leave entity within a database transaction.
         /// </summary>

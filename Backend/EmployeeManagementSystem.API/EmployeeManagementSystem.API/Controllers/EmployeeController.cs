@@ -47,6 +47,58 @@ namespace EmployeeManagementSystem.API.Controllers
             return NotFound(ApiResponse<EmployeeResponseDto>.Fail(result.Message));
         }
 
+        /// <summary>
+        /// Retrieves an employee profile by ID. Admin/HR can view any profile; Employees can view their own profile.
+        /// </summary>
+        [HttpGet("{id:int}")]
+        [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<ApiResponse<EmployeeResponseDto>>> GetEmployeeById(int id, CancellationToken cancellationToken)
+        {
+            var isAdminOrHr = User.IsInRole(AppRoles.Admin) || User.IsInRole("ADMIN") || User.IsInRole(AppRoles.HR) || User.IsInRole("HR");
+            if (!isAdminOrHr)
+            {
+                var empClaim = User.FindFirst("employeeId")?.Value;
+                if (!int.TryParse(empClaim, out var empId) || empId != id)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<EmployeeResponseDto>.Fail("You are not authorized to view this employee profile."));
+                }
+            }
+
+            var result = await _employeeService.GetEmployeeByIdAsync(id, cancellationToken);
+            return ToActionResult(result);
+        }
+
+        /// <summary>
+        /// Updates an employee's personal contact and biographical details. Admin/HR or the employee themselves.
+        /// </summary>
+        [HttpPut("{id:int}/personal")]
+        [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<ApiResponse<EmployeeResponseDto>>> UpdatePersonalDetails(
+            int id,
+            [FromBody] EmployeePersonalUpdateDto dto,
+            CancellationToken cancellationToken)
+        {
+            var isAdminOrHr = User.IsInRole(AppRoles.Admin) || User.IsInRole("ADMIN") || User.IsInRole(AppRoles.HR) || User.IsInRole("HR");
+            if (!isAdminOrHr)
+            {
+                var empClaim = User.FindFirst("employeeId")?.Value;
+                if (!int.TryParse(empClaim, out var empId) || empId != id)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<EmployeeResponseDto>.Fail("You are not authorized to update this employee profile."));
+                }
+            }
+
+            var result = await _employeeService.UpdatePersonalDetailsAsync(id, dto, cancellationToken);
+            return ToActionResult(result);
+        }
+
         private ActionResult<ApiResponse<T>> ToActionResult<T>(ServiceResult<T> result)
         {
             if (result.Succeeded)

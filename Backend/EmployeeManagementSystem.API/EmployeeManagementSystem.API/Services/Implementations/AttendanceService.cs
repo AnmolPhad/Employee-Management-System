@@ -92,6 +92,13 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 var attendance = await _context.Attendances
                     .FirstOrDefaultAsync(a => a.EmployeeId == employee.EmployeeId && a.AttendanceDate == targetDate, cancellationToken);
 
+                if (attendance != null && attendance.CheckInTime.HasValue)
+                {
+                    _logger.LogWarning("Check-in rejected for EmployeeId {EmployeeId} on {Date:yyyy-MM-dd}: Already checked in at {Time}.",
+                        employee.EmployeeId, targetDate, attendance.CheckInTime);
+                    return ServiceResult<AttendanceResponseDto>.Conflict("Attendance has already been checked in for today.");
+                }
+
                 if (attendance == null)
                 {
                     attendance = new Attendance
@@ -106,16 +113,7 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 }
                 else
                 {
-                    // First Check-in rule: If CheckInTime already recorded, keep earliest punch
-                    if (!attendance.CheckInTime.HasValue)
-                    {
-                        attendance.CheckInTime = punchTime;
-                    }
-                    else if (punchTime < attendance.CheckInTime.Value)
-                    {
-                        attendance.CheckInTime = punchTime;
-                    }
-
+                    attendance.CheckInTime = punchTime;
                     if (!string.IsNullOrWhiteSpace(dto.Remarks))
                     {
                         attendance.Remarks = dto.Remarks;
@@ -129,6 +127,12 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                     employee.EmployeeId, targetDate, attendance.CheckInTime);
 
                 return ServiceResult<AttendanceResponseDto>.Success(ProjectToDto(attendance, employee), "Check-in recorded successfully.");
+            }
+            catch (DbUpdateException ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogWarning(ex, "DbUpdateException recording check-in for EmployeeId {EmployeeId}.", employee.EmployeeId);
+                return ServiceResult<AttendanceResponseDto>.Conflict("Attendance has already been checked in for today.");
             }
             catch (Exception ex)
             {
@@ -174,11 +178,7 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                     return ServiceResult<AttendanceResponseDto>.BadRequest("Check-out time cannot be earlier than check-in time.");
                 }
 
-                // Last Check-out rule: Latest punch becomes official CheckOutTime
-                if (!attendance.CheckOutTime.HasValue || punchTime > attendance.CheckOutTime.Value)
-                {
-                    attendance.CheckOutTime = punchTime;
-                }
+                attendance.CheckOutTime = punchTime;
 
                 // Calculate WorkingHours = LastCheckOut - FirstCheckIn
                 var duration = attendance.CheckOutTime.Value - attendance.CheckInTime.Value;

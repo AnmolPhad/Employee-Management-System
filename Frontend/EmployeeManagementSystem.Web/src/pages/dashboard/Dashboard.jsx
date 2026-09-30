@@ -20,6 +20,8 @@ import {
   FiSun,
   FiArrowRight,
   FiTag,
+  FiList,
+  FiPlus,
 } from 'react-icons/fi';
 
 const Dashboard = () => {
@@ -31,7 +33,7 @@ const Dashboard = () => {
     pendingTicketsCount: null,
     holidaysCount: null,
     myPendingTicketsCount: null,
-    myLeaveBalanceCount: null,
+    myLeaveBalance: null, // { available: number, pending: number, approved: number }
   });
 
   const [loading, setLoading] = useState(true);
@@ -95,9 +97,20 @@ const Dashboard = () => {
             nextStats.myPendingTicketsCount = myTicketsRes.value.data.totalCount;
           }
           if (myLeaveRes.status === 'fulfilled' && Array.isArray(myLeaveRes.value?.data)) {
-            // Total remaining days across active leave types
-            const totalRemaining = myLeaveRes.value.data.reduce((acc, item) => acc + (item.remainingDays || 0), 0);
-            nextStats.myLeaveBalanceCount = totalRemaining;
+            const balances = myLeaveRes.value.data;
+            const available = balances.reduce(
+              (acc, item) => acc + (item.availableDays ?? item.AvailableDays ?? 0),
+              0
+            );
+            const pending = balances.reduce(
+              (acc, item) => acc + (item.pendingDays ?? item.PendingDays ?? 0),
+              0
+            );
+            const approved = balances.reduce(
+              (acc, item) => acc + (item.approvedDays ?? item.ApprovedDays ?? 0),
+              0
+            );
+            nextStats.myLeaveBalance = { available, pending, approved };
           }
         } catch {
           // Non-critical fallback
@@ -136,7 +149,12 @@ const Dashboard = () => {
               {primaryRole}
             </span>
             <span className="text-xs text-blue-100">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+              {new Date().toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
             </span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -148,11 +166,11 @@ const Dashboard = () => {
         </div>
         <div className="shrink-0 flex items-center gap-2">
           <Link
-            to={ROUTES.LEAVE}
+            to={ROUTES.LEAVE_APPLY}
             className="inline-flex items-center gap-2 px-4 py-2 bg-white text-blue-700 hover:bg-blue-50 font-semibold text-xs rounded-xl shadow-xs transition-colors"
           >
-            <FiCalendar className="w-4 h-4" />
-            Apply Leave
+            <FiPlus className="w-4 h-4" />
+            Apply for Leave
           </Link>
         </div>
       </div>
@@ -171,9 +189,14 @@ const Dashboard = () => {
               <Card className="hover:border-blue-300 transition-all">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Employees</p>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Total Employees
+                    </p>
                     <h3 className="text-2xl font-bold text-slate-800 mt-1">{stats.employeesCount}</h3>
-                    <Link to={ROUTES.EMPLOYEES} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2">
+                    <Link
+                      to={ROUTES.EMPLOYEES}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2"
+                    >
                       Manage employees <FiArrowRight className="w-3 h-3" />
                     </Link>
                   </div>
@@ -188,9 +211,16 @@ const Dashboard = () => {
               <Card className="hover:border-blue-300 transition-all">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Departments</p>
-                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{stats.departmentsCount}</h3>
-                    <Link to={ROUTES.DEPARTMENTS} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Departments
+                    </p>
+                    <h3 className="text-2xl font-bold text-slate-800 mt-1">
+                      {stats.departmentsCount}
+                    </h3>
+                    <Link
+                      to={ROUTES.DEPARTMENTS}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2"
+                    >
                       View departments <FiArrowRight className="w-3 h-3" />
                     </Link>
                   </div>
@@ -205,9 +235,16 @@ const Dashboard = () => {
               <Card className="hover:border-amber-300 transition-all">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Pending Approvals</p>
-                    <h3 className="text-2xl font-bold text-amber-600 mt-1">{stats.pendingTicketsCount}</h3>
-                    <Link to={ROUTES.MY_APPROVALS} className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700 mt-2">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Pending Approvals
+                    </p>
+                    <h3 className="text-2xl font-bold text-amber-600 mt-1">
+                      {stats.pendingTicketsCount}
+                    </h3>
+                    <Link
+                      to={ROUTES.MY_APPROVALS}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700 mt-2"
+                    >
                       Review requests <FiArrowRight className="w-3 h-3" />
                     </Link>
                   </div>
@@ -222,9 +259,16 @@ const Dashboard = () => {
               <Card className="hover:border-blue-300 transition-all">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">My Open Tickets</p>
-                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{stats.myPendingTicketsCount}</h3>
-                    <Link to={ROUTES.TICKETS} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      My Open Tickets
+                    </p>
+                    <h3 className="text-2xl font-bold text-slate-800 mt-1">
+                      {stats.myPendingTicketsCount}
+                    </h3>
+                    <Link
+                      to={ROUTES.TICKETS}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2"
+                    >
                       View my tickets <FiArrowRight className="w-3 h-3" />
                     </Link>
                   </div>
@@ -235,13 +279,38 @@ const Dashboard = () => {
               </Card>
             )}
 
-            {stats.myLeaveBalanceCount !== null && (
+            {stats.myLeaveBalance !== null && (
               <Card className="hover:border-blue-300 transition-all">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Leave Days Left</p>
-                    <h3 className="text-2xl font-bold text-slate-800 mt-1">{stats.myLeaveBalanceCount}</h3>
-                    <Link to={ROUTES.LEAVE} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Leave Days Left
+                    </p>
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                      <span className="text-2xl font-bold text-slate-800">
+                        {stats.myLeaveBalance.available}
+                      </span>
+                      <span className="text-xs text-slate-500 font-medium">days available</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-0.5">
+                      <span>
+                        Pending:{' '}
+                        <strong className="text-amber-600 font-semibold">
+                          {stats.myLeaveBalance.pending}
+                        </strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Approved:{' '}
+                        <strong className="text-emerald-600 font-semibold">
+                          {stats.myLeaveBalance.approved}
+                        </strong>
+                      </span>
+                    </div>
+                    <Link
+                      to={ROUTES.LEAVE}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 pt-1 block"
+                    >
                       Leave balance details <FiArrowRight className="w-3 h-3" />
                     </Link>
                   </div>
@@ -256,9 +325,14 @@ const Dashboard = () => {
               <Card className="hover:border-blue-300 transition-all">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Org Holidays</p>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Org Holidays
+                    </p>
                     <h3 className="text-2xl font-bold text-slate-800 mt-1">{stats.holidaysCount}</h3>
-                    <Link to={ROUTES.HOLIDAYS} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2">
+                    <Link
+                      to={ROUTES.HOLIDAYS}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 mt-2"
+                    >
                       Holiday calendar <FiArrowRight className="w-3 h-3" />
                     </Link>
                   </div>
@@ -270,44 +344,61 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* Quick Actions Panel */}
+          {/* Quick Actions & Workspace Panel */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <Card title="Quick Actions" subtitle="Frequently used operations">
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 <Link
-                  to={ROUTES.LEAVE}
+                  to={ROUTES.LEAVE_APPLY}
                   className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <FiCalendar className="w-4 h-4 text-blue-600" />
+                    <FiPlus className="w-4 h-4 text-blue-600" />
                     <span className="text-sm font-medium">Apply for Leave</span>
                   </div>
                   <FiArrowRight className="w-4 h-4 text-slate-400" />
                 </Link>
+
+                <Link
+                  to={ROUTES.LEAVE_HISTORY}
+                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <FiList className="w-4 h-4 text-indigo-600" />
+                    <span className="text-sm font-medium">History</span>
+                  </div>
+                  <FiArrowRight className="w-4 h-4 text-slate-400" />
+                </Link>
+
                 <Link
                   to={ROUTES.ATTENDANCE}
                   className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <FiClock className="w-4 h-4 text-purple-600" />
-                    <span className="text-sm font-medium">Daily Attendance</span>
+                    <span className="text-sm font-medium">My Attendance</span>
                   </div>
                   <FiArrowRight className="w-4 h-4 text-slate-400" />
                 </Link>
+
                 <Link
-                  to={ROUTES.TICKETS}
+                  to={ROUTES.LEAVE}
                   className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <FiTag className="w-4 h-4 text-emerald-600" />
-                    <span className="text-sm font-medium">Track Leave Tickets</span>
+                    <FiCalendar className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm font-medium">Leave Portal</span>
                   </div>
                   <FiArrowRight className="w-4 h-4 text-slate-400" />
                 </Link>
               </div>
             </Card>
 
-            <Card title="System Information" subtitle="Platform environment status" className="md:col-span-2">
+            <Card
+              title="System Information"
+              subtitle="Platform environment status"
+              className="md:col-span-2"
+            >
               <div className="space-y-4 text-sm">
                 <div className="flex items-center justify-between py-2 border-b border-slate-100">
                   <span className="text-slate-500">API Connection</span>

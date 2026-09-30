@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ROUTES } from '../../utils/constants';
 import {
@@ -9,40 +9,107 @@ import {
   FiBriefcase,
   FiCalendar,
   FiClock,
+  FiList,
   FiSun,
   FiDollarSign,
   FiTag,
   FiCheckSquare,
   FiLayers,
+  FiSettings,
   FiX,
 } from 'react-icons/fi';
 
 const Sidebar = ({ isOpen, onClose }) => {
+  const location = useLocation();
   const { isAdmin, isHR, isManager } = useAuth();
 
   const isPrivileged = isAdmin || isHR;
   const isApprover = isAdmin || isHR || isManager;
+  const currentPath = location.pathname.toLowerCase();
 
-  const linkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-      isActive
-        ? 'bg-blue-600 text-white shadow-xs font-semibold'
-        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-    }`;
+  const isItemActive = (itemPath) => {
+    const path = itemPath.toLowerCase();
+
+    // 1. Dashboard
+    if (path === ROUTES.DASHBOARD.toLowerCase()) {
+      return currentPath === '/dashboard' || currentPath === '/';
+    }
+
+    // 2. Approvals (must be strictly separated from My Workspace)
+    if (path === ROUTES.LEAVE_APPROVALS.toLowerCase()) {
+      return currentPath.startsWith('/leave/approvals');
+    }
+    if (path === ROUTES.TICKETS_APPROVALS.toLowerCase()) {
+      return currentPath.startsWith('/tickets/approvals') || currentPath === '/my-approvals';
+    }
+
+    // 3. My Workspace Items
+    if (path === ROUTES.LEAVE.toLowerCase()) {
+      return (
+        currentPath.startsWith('/leave') &&
+        !currentPath.startsWith('/leave/approvals') &&
+        !currentPath.startsWith('/leave-types')
+      );
+    }
+    if (path === ROUTES.ATTENDANCE.toLowerCase()) {
+      return (
+        currentPath === '/attendance' ||
+        currentPath === '/attendance/my' ||
+        (currentPath.startsWith('/attendance/') && !currentPath.startsWith('/admin/attendance'))
+      );
+    }
+    if (path === ROUTES.SALARY.toLowerCase()) {
+      return (
+        currentPath === '/salary' ||
+        (currentPath.startsWith('/salary/') && !currentPath.startsWith('/admin/salary'))
+      );
+    }
+    if (path === ROUTES.TICKETS_MY.toLowerCase()) {
+      return (
+        currentPath === '/tickets/my' ||
+        currentPath === '/tickets' ||
+        (currentPath.startsWith('/tickets/') && !currentPath.startsWith('/tickets/approvals'))
+      );
+    }
+
+    // 4. Management & Admin
+    if (path === ROUTES.ADMIN_ATTENDANCE.toLowerCase()) {
+      return currentPath.startsWith('/admin/attendance');
+    }
+    if (path === ROUTES.ADMIN_SALARY_SETTINGS.toLowerCase()) {
+      return currentPath.startsWith('/admin/salary/settings');
+    }
+    if (path === ROUTES.ADMIN_SALARY.toLowerCase()) {
+      return currentPath.startsWith('/admin/salary') && !currentPath.startsWith('/admin/salary/settings');
+    }
+    if (path === ROUTES.ADMIN_TICKETS.toLowerCase()) {
+      return currentPath.startsWith('/admin/tickets');
+    }
+    if (path === ROUTES.EMPLOYEES.toLowerCase()) {
+      return currentPath.startsWith('/employees');
+    }
+    if (path === ROUTES.DEPARTMENTS.toLowerCase()) {
+      return currentPath.startsWith('/departments');
+    }
+    if (path === ROUTES.LEAVE_TYPES.toLowerCase()) {
+      return currentPath.startsWith('/leave-types');
+    }
+    if (path === ROUTES.HOLIDAYS.toLowerCase()) {
+      return currentPath.startsWith('/holidays');
+    }
+
+    return currentPath === path;
+  };
 
   const navGroups = [
     {
-      title: 'General',
-      items: [{ label: 'Dashboard', path: ROUTES.DASHBOARD, icon: FiHome }],
-    },
-    {
       title: 'My Workspace',
       items: [
-        { label: 'My Profile', path: ROUTES.MY_PROFILE, icon: FiUser },
-        { label: 'Leave', path: ROUTES.LEAVE, icon: FiCalendar },
-        { label: 'Attendance', path: ROUTES.ATTENDANCE, icon: FiClock },
-        { label: 'Salary (CTC)', path: ROUTES.SALARY, icon: FiDollarSign },
-        { label: 'My Tickets', path: ROUTES.TICKETS, icon: FiTag },
+        { label: 'Dashboard', path: ROUTES.DASHBOARD, icon: FiHome },
+        { label: 'My Leave', path: ROUTES.LEAVE, icon: FiCalendar },
+        { label: 'My Attendance', path: ROUTES.ATTENDANCE, icon: FiClock },
+        { label: 'My Salary', path: ROUTES.SALARY, icon: FiDollarSign },
+        { label: 'My Tickets', path: ROUTES.TICKETS_MY, icon: FiTag },
       ],
     },
     ...(isApprover
@@ -57,22 +124,43 @@ const Sidebar = ({ isOpen, onClose }) => {
               },
               {
                 label: 'Ticket Approvals',
-                path: ROUTES.MY_APPROVALS,
-                icon: FiTag,
+                path: ROUTES.TICKETS_APPROVALS,
+                icon: FiCheckSquare,
               },
             ],
           },
         ]
       : []),
-    ...(isPrivileged
+    ...(isPrivileged || isManager
+      ? [
+          {
+            title: 'Management',
+            items: [
+              ...(isPrivileged
+                ? [
+                    { label: 'Employees', path: ROUTES.EMPLOYEES, icon: FiUsers },
+                    { label: 'Departments', path: ROUTES.DEPARTMENTS, icon: FiBriefcase },
+                    { label: 'Leave Types', path: ROUTES.LEAVE_TYPES, icon: FiLayers },
+                  ]
+                : []),
+              { label: 'Staff Attendance', path: ROUTES.ADMIN_ATTENDANCE, icon: FiClock },
+              ...(isPrivileged
+                ? [
+                    { label: 'Holidays', path: ROUTES.HOLIDAYS, icon: FiSun },
+                    { label: 'Salary Management', path: ROUTES.ADMIN_SALARY, icon: FiDollarSign },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
+    ...(isAdmin
       ? [
           {
             title: 'Administration',
             items: [
-              { label: 'Employees', path: ROUTES.EMPLOYEES, icon: FiUsers },
-              { label: 'Departments', path: ROUTES.DEPARTMENTS, icon: FiBriefcase },
-              { label: 'Leave Types', path: ROUTES.LEAVE_TYPES, icon: FiLayers },
-              { label: 'Holidays', path: ROUTES.HOLIDAYS, icon: FiSun },
+              { label: 'All Leave Tickets', path: ROUTES.ADMIN_TICKETS, icon: FiTag },
+              { label: 'Salary Settings', path: ROUTES.ADMIN_SALARY_SETTINGS, icon: FiSettings },
             ],
           },
         ]
@@ -122,6 +210,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               </div>
               {group.items.map((item, iIdx) => {
                 const Icon = item.icon;
+                const active = isItemActive(item.path);
                 return (
                   <NavLink
                     key={iIdx}
@@ -129,7 +218,11 @@ const Sidebar = ({ isOpen, onClose }) => {
                     onClick={() => {
                       if (window.innerWidth < 1024) onClose();
                     }}
-                    className={linkClass}
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                      active
+                        ? 'bg-blue-600 text-white shadow-xs font-semibold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
                   >
                     <Icon className="w-4 h-4 shrink-0" />
                     <span>{item.label}</span>

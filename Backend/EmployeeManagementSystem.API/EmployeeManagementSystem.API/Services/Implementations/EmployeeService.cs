@@ -292,6 +292,31 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             return ServiceResult<EmployeeResponseDto>.Success(updatedEmployee.Data!, "Employee updated successfully.");
         }
 
+        public async Task<ServiceResult<EmployeeResponseDto>> UpdatePersonalDetailsAsync(int id, EmployeePersonalUpdateDto dto, CancellationToken cancellationToken = default)
+        {
+            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.EmployeeId == id, cancellationToken);
+            if (employee is null)
+            {
+                return ServiceResult<EmployeeResponseDto>.NotFound("Employee was not found.");
+            }
+
+            if (dto.DateOfBirth.HasValue && dto.DateOfBirth.Value.Date > DateTime.Today)
+            {
+                return ServiceResult<EmployeeResponseDto>.BadRequest("Date of birth cannot be in the future.");
+            }
+
+            employee.Phone = string.IsNullOrWhiteSpace(dto.Phone) ? null : dto.Phone.Trim();
+            employee.DateOfBirth = dto.DateOfBirth?.Date;
+            employee.Gender = dto.Gender;
+            employee.Address = string.IsNullOrWhiteSpace(dto.Address) ? null : dto.Address.Trim();
+            employee.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            var updatedEmployee = await GetEmployeeByIdAsync(id, cancellationToken);
+            return ServiceResult<EmployeeResponseDto>.Success(updatedEmployee.Data!, "Personal information updated successfully.");
+        }
+
         public async Task<ServiceResult<bool>> DeleteEmployeeAsync(int id, CancellationToken cancellationToken = default)
         {
             var employee = await _context.Employees.FirstOrDefaultAsync(e => e.EmployeeId == id, cancellationToken);

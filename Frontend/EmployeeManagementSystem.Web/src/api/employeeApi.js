@@ -6,7 +6,7 @@ export const employeeApi = {
   },
 
   getEmployeeById: async (id) => {
-    return await axiosClient.get(`/api/admin/employees/${id}`);
+    return await axiosClient.get(`/api/employees/${id}`);
   },
 
   createEmployee: async (data) => {
@@ -15,6 +15,10 @@ export const employeeApi = {
 
   updateEmployee: async (id, data) => {
     return await axiosClient.put(`/api/admin/employees/${id}`, data);
+  },
+
+  updatePersonalDetails: async (id, data) => {
+    return await axiosClient.put(`/api/employees/${id}/personal`, data);
   },
 
   deleteEmployee: async (id) => {

@@ -117,45 +117,50 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                         "Leave has already been applied for one or more dates in the requested period.");
                 }
 
-                // Balance validation per affected calendar year
-                var startYear = startDate.Year;
-                var endYear = endDate.Year;
+                // Financial-Year validation: Reject requests that cross financial years (April 1 - March 31)
+                var startFy = GetFinancialYear(startDate);
+                var endFy = GetFinancialYear(endDate);
 
-                for (var y = startYear; y <= endYear; y++)
+                if (startFy.StartYear != endFy.StartYear)
                 {
-                    var requestedDaysInYear = CalculateDaysInYear(startDate, endDate, y);
-                    if (requestedDaysInYear <= 0) continue;
+                    _logger.LogWarning("Leave application rejected for EmployeeId {EmployeeId}: Span multiple financial years between {StartDate:yyyy-MM-dd} and {EndDate:yyyy-MM-dd}.",
+                        employee.EmployeeId, startDate, endDate);
 
-                    var yearStart = new DateTime(y, 1, 1);
-                    var yearEnd = new DateTime(y, 12, 31);
+                    return ServiceResult<LeaveResponseDto>.BadRequest(
+                        "Leave application cannot span multiple financial years. Please submit separate applications for each financial year.");
+                }
 
-                    var leavesInYear = await _context.Leaves
-                        .AsNoTracking()
-                        .Where(l => l.EmployeeId == employee.EmployeeId &&
-                                    l.LeaveTypeId == leaveType.LeaveTypeId &&
-                                    (l.Status == LeaveStatus.Pending || l.Status == LeaveStatus.Approved) &&
-                                    l.StartDate <= yearEnd && l.EndDate >= yearStart)
-                        .Select(l => new { l.StartDate, l.EndDate, l.Status })
-                        .ToListAsync(cancellationToken);
+                // Balance validation in the leave dates' financial year
+                var fyStart = startFy.Start;
+                var fyEnd = startFy.End;
+                var requestedDays = (endDate - startDate).Days + 1;
 
-                    var pendingDaysInYear = leavesInYear
-                        .Where(l => l.Status == LeaveStatus.Pending)
-                        .Sum(l => CalculateDaysInYear(l.StartDate, l.EndDate, y));
+                var leavesInFy = await _context.Leaves
+                    .AsNoTracking()
+                    .Where(l => l.EmployeeId == employee.EmployeeId &&
+                                l.LeaveTypeId == leaveType.LeaveTypeId &&
+                                (l.Status == LeaveStatus.Pending || l.Status == LeaveStatus.Approved) &&
+                                l.StartDate <= fyEnd && l.EndDate >= fyStart)
+                    .Select(l => new { l.StartDate, l.EndDate, l.Status })
+                    .ToListAsync(cancellationToken);
 
-                    var approvedDaysInYear = leavesInYear
-                        .Where(l => l.Status == LeaveStatus.Approved)
-                        .Sum(l => CalculateDaysInYear(l.StartDate, l.EndDate, y));
+                var pendingDaysInFy = leavesInFy
+                    .Where(l => l.Status == LeaveStatus.Pending)
+                    .Sum(l => CalculateDaysInPeriod(l.StartDate, l.EndDate, fyStart, fyEnd));
 
-                    var availableDaysInYear = leaveType.MaxDaysPerYear - pendingDaysInYear - approvedDaysInYear;
+                var approvedDaysInFy = leavesInFy
+                    .Where(l => l.Status == LeaveStatus.Approved)
+                    .Sum(l => CalculateDaysInPeriod(l.StartDate, l.EndDate, fyStart, fyEnd));
 
-                    if (requestedDaysInYear > availableDaysInYear)
-                    {
-                        _logger.LogWarning("Leave application rejected for EmployeeId {EmployeeId}: Insufficient balance for LeaveTypeId {LeaveTypeId} in {Year}. Requested: {RequestedDays}, Available: {AvailableDays}.",
-                            employee.EmployeeId, leaveType.LeaveTypeId, y, requestedDaysInYear, availableDaysInYear);
+                var availableDaysInFy = leaveType.MaxDaysPerYear - pendingDaysInFy - approvedDaysInFy;
 
-                        return ServiceResult<LeaveResponseDto>.BadRequest(
-                            $"Insufficient leave balance for {leaveType.LeaveTypeName} in year {y}. Requested: {requestedDaysInYear} day(s), Available: {availableDaysInYear} day(s).");
-                    }
+                if (requestedDays > availableDaysInFy)
+                {
+                    _logger.LogWarning("Leave application rejected for EmployeeId {EmployeeId}: Insufficient balance for LeaveTypeId {LeaveTypeId} in FY {FyLabel}. Requested: {RequestedDays}, Available: {AvailableDays}.",
+                        employee.EmployeeId, leaveType.LeaveTypeId, startFy.Label, requestedDays, availableDaysInFy);
+
+                    return ServiceResult<LeaveResponseDto>.BadRequest(
+                        $"Insufficient leave balance for {leaveType.LeaveTypeName} in financial year {startFy.Label}. Requested: {requestedDays} day(s), Available: {Math.Max(0, availableDaysInFy)} day(s).");
                 }
 
                 var leave = new Leave
@@ -324,9 +329,12 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 return ServiceResult<IReadOnlyList<LeaveBalanceResponseDto>>.Unauthorized("Authenticated user is not linked to an employee profile.");
             }
 
-            var targetYear = year ?? DateTime.UtcNow.Year;
-            var yearStart = new DateTime(targetYear, 1, 1);
-            var yearEnd = new DateTime(targetYear, 12, 31);
+            var targetFy = year.HasValue
+                ? GetFinancialYearFromStartYear(year.Value)
+                : GetFinancialYear(DateTime.UtcNow);
+
+            var fyStart = targetFy.Start;
+            var fyEnd = targetFy.End;
 
             var leaveTypes = await _context.LeaveTypes
                 .AsNoTracking()
@@ -334,10 +342,10 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 .OrderBy(lt => lt.LeaveTypeId)
                 .ToListAsync(cancellationToken);
 
-            var employeeLeavesInYear = await _context.Leaves
+            var employeeLeavesInFy = await _context.Leaves
                 .AsNoTracking()
                 .Where(l => l.EmployeeId == employee.EmployeeId &&
-                            l.StartDate <= yearEnd && l.EndDate >= yearStart)
+                            l.StartDate <= fyEnd && l.EndDate >= fyStart)
                 .Select(l => new { l.LeaveTypeId, l.StartDate, l.EndDate, l.Status })
                 .ToListAsync(cancellationToken);
 
@@ -345,19 +353,19 @@ namespace EmployeeManagementSystem.API.Services.Implementations
 
             foreach (var lt in leaveTypes)
             {
-                var typeLeaves = employeeLeavesInYear.Where(l => l.LeaveTypeId == lt.LeaveTypeId).ToList();
+                var typeLeaves = employeeLeavesInFy.Where(l => l.LeaveTypeId == lt.LeaveTypeId).ToList();
 
                 var pendingDays = typeLeaves
                     .Where(l => l.Status == LeaveStatus.Pending)
-                    .Sum(l => CalculateDaysInYear(l.StartDate, l.EndDate, targetYear));
+                    .Sum(l => CalculateDaysInPeriod(l.StartDate, l.EndDate, fyStart, fyEnd));
 
                 var approvedDays = typeLeaves
                     .Where(l => l.Status == LeaveStatus.Approved)
-                    .Sum(l => CalculateDaysInYear(l.StartDate, l.EndDate, targetYear));
+                    .Sum(l => CalculateDaysInPeriod(l.StartDate, l.EndDate, fyStart, fyEnd));
 
                 var rejectedDays = typeLeaves
                     .Where(l => l.Status == LeaveStatus.Rejected)
-                    .Sum(l => CalculateDaysInYear(l.StartDate, l.EndDate, targetYear));
+                    .Sum(l => CalculateDaysInPeriod(l.StartDate, l.EndDate, fyStart, fyEnd));
 
                 var availableDays = lt.MaxDaysPerYear - pendingDays - approvedDays;
 
@@ -369,7 +377,9 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                     PendingDays = pendingDays,
                     ApprovedDays = approvedDays,
                     RejectedDays = rejectedDays,
-                    AvailableDays = availableDays < 0 ? 0 : availableDays
+                    AvailableDays = availableDays < 0 ? 0 : availableDays,
+                    FinancialYear = targetFy.Label,
+                    IsPaid = lt.IsPaid
                 });
             }
 
@@ -843,18 +853,39 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             }
         }
 
-        private static int CalculateDaysInYear(DateTime startDate, DateTime endDate, int year)
+        private static (DateTime Start, DateTime End, int StartYear, string Label) GetFinancialYear(DateTime date)
         {
-            var yearStart = new DateTime(year, 1, 1);
-            var yearEnd = new DateTime(year, 12, 31);
+            var startYear = date.Month >= 4 ? date.Year : date.Year - 1;
+            var start = new DateTime(startYear, 4, 1, 0, 0, 0, DateTimeKind.Unspecified);
+            var end = new DateTime(startYear + 1, 3, 31, 23, 59, 59, 999, DateTimeKind.Unspecified);
+            var nextYearShort = (startYear + 1) % 100;
+            var label = $"{startYear}-{nextYearShort:D2}";
+            return (start, end, startYear, label);
+        }
 
-            if (endDate.Date < yearStart || startDate.Date > yearEnd)
+        private static (DateTime Start, DateTime End, int StartYear, string Label) GetFinancialYearFromStartYear(int startYear)
+        {
+            var start = new DateTime(startYear, 4, 1, 0, 0, 0, DateTimeKind.Unspecified);
+            var end = new DateTime(startYear + 1, 3, 31, 23, 59, 59, 999, DateTimeKind.Unspecified);
+            var nextYearShort = (startYear + 1) % 100;
+            var label = $"{startYear}-{nextYearShort:D2}";
+            return (start, end, startYear, label);
+        }
+
+        private static int CalculateDaysInPeriod(DateTime startDate, DateTime endDate, DateTime periodStart, DateTime periodEnd)
+        {
+            var s = startDate.Date;
+            var e = endDate.Date;
+            var pStart = periodStart.Date;
+            var pEnd = periodEnd.Date;
+
+            if (e < pStart || s > pEnd)
             {
                 return 0;
             }
 
-            var effectiveStart = startDate.Date < yearStart ? yearStart : startDate.Date;
-            var effectiveEnd = endDate.Date > yearEnd ? yearEnd : endDate.Date;
+            var effectiveStart = s < pStart ? pStart : s;
+            var effectiveEnd = e > pEnd ? pEnd : e;
 
             return (effectiveEnd - effectiveStart).Days + 1;
         }

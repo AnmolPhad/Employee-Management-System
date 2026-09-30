@@ -36,7 +36,7 @@ const Navbar = ({ onToggleSidebar }) => {
       <div className="flex items-center gap-3 sm:gap-4">
         {user && (
           <Link
-            to={ROUTES.MY_PROFILE}
+            to={user?.employeeId ? `/employees/${user.employeeId}` : ROUTES.DASHBOARD}
             className="flex items-center gap-3 group p-1.5 -m-1.5 rounded-xl hover:bg-slate-50 transition-colors"
             title="View My Profile"
           >

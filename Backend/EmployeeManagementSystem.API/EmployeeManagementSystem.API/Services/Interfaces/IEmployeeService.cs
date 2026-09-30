@@ -9,6 +9,7 @@ namespace EmployeeManagementSystem.API.Services.Interfaces
         Task<ServiceResult<EmployeeResponseDto>> GetEmployeeByIdAsync(int id, CancellationToken cancellationToken = default);
         Task<ServiceResult<EmployeeResponseDto>> CreateEmployeeAsync(EmployeeCreateDto dto, CancellationToken cancellationToken = default);
         Task<ServiceResult<EmployeeResponseDto>> UpdateEmployeeAsync(int id, EmployeeUpdateDto dto, CancellationToken cancellationToken = default);
+        Task<ServiceResult<EmployeeResponseDto>> UpdatePersonalDetailsAsync(int id, EmployeePersonalUpdateDto dto, CancellationToken cancellationToken = default);
         Task<ServiceResult<bool>> DeleteEmployeeAsync(int id, CancellationToken cancellationToken = default);
         Task<ServiceResult<EmployeeResponseDto>> GetMyProfileAsync(string userId, CancellationToken cancellationToken = default);
     }

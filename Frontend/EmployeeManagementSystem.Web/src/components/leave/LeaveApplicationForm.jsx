@@ -30,28 +30,52 @@ const LeaveApplicationForm = ({ onSubmit, isLoading = false }) => {
     reason: '',
   });
 
-  // Load active leave categories for authenticated users
+  // Load active leave categories and employee balances
   useEffect(() => {
-    const fetchActiveTypes = async () => {
+    const fetchLeaveData = async () => {
       setTypesLoading(true);
       try {
-        const res = await leaveApi.getActiveLeaveTypes();
-        if (res && res.data) {
-          const list = Array.isArray(res.data) ? res.data : [];
-          setActiveLeaveTypes(list);
-          if (list.length > 0) {
-            setFormData((prev) => ({ ...prev, leaveTypeId: String(list[0].leaveTypeId) }));
-          }
+        const [typesRes, balancesRes] = await Promise.all([
+          leaveApi.getActiveLeaveTypes(),
+          leaveApi.getMyLeaveBalance(),
+        ]);
+
+        const typesList = Array.isArray(typesRes?.data) ? typesRes.data : [];
+        const balancesList = Array.isArray(balancesRes?.data) ? balancesRes.data : [];
+
+        // Build balance map by leaveTypeId
+        const balanceMap = {};
+        balancesList.forEach((b) => {
+          balanceMap[b.leaveTypeId] = b;
+        });
+
+        // Merge types with real balances
+        const mergedList = typesList.map((t) => {
+          const bal = balanceMap[t.leaveTypeId];
+          return {
+            ...t,
+            availableDays: bal ? bal.availableDays : t.maxDaysPerYear,
+            annualEntitlement: bal ? bal.annualEntitlement : t.maxDaysPerYear,
+            pendingDays: bal ? bal.pendingDays : 0,
+            approvedDays: bal ? bal.approvedDays : 0,
+            financialYear: bal ? bal.financialYear : '',
+          };
+        });
+
+        setActiveLeaveTypes(mergedList);
+        if (mergedList.length > 0) {
+          const firstAvailable = mergedList.find((m) => m.availableDays > 0) || mergedList[0];
+          setFormData((prev) => ({ ...prev, leaveTypeId: String(firstAvailable.leaveTypeId) }));
         }
       } catch (err) {
-        console.error('Failed to load active leave categories:', err);
+        console.error('Failed to load active leave categories and balances:', err);
         setFormError('Unable to load leave categories. Please try again later.');
       } finally {
         setTypesLoading(false);
       }
     };
 
-    fetchActiveTypes();
+    fetchLeaveData();
   }, []);
 
   const handleChange = (e) => {
@@ -97,6 +121,23 @@ const LeaveApplicationForm = ({ onSubmit, isLoading = false }) => {
       errors.endDate = 'End date is required.';
     } else if (formData.startDate && formData.endDate < formData.startDate) {
       errors.endDate = 'End date cannot be prior to start date.';
+    }
+
+    // Check financial year boundary (April 1 to March 31)
+    if (formData.startDate && formData.endDate) {
+      const sDate = new Date(formData.startDate);
+      const eDate = new Date(formData.endDate);
+      if (!isNaN(sDate.getTime()) && !isNaN(eDate.getTime()) && eDate >= sDate) {
+        const getFyStartYear = (d) => (d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1);
+        if (getFyStartYear(sDate) !== getFyStartYear(eDate)) {
+          errors.endDate = 'Leave application cannot span multiple financial years (April 1 - March 31). Please submit separate applications for each financial year.';
+        }
+      }
+    }
+
+    // Check available balance
+    if (selectedCategory && selectedCategory.availableDays !== undefined && estimatedDays > selectedCategory.availableDays) {
+      errors.endDate = `Requested duration (${estimatedDays} day${estimatedDays === 1 ? '' : 's'}) exceeds available balance (${selectedCategory.availableDays} day${selectedCategory.availableDays === 1 ? '' : 's'}).`;
     }
 
     if (!formData.reason.trim()) {
@@ -179,8 +220,14 @@ const LeaveApplicationForm = ({ onSubmit, isLoading = false }) => {
                 <option value="">No active leave types available</option>
               ) : (
                 activeLeaveTypes.map((type) => (
-                  <option key={type.leaveTypeId} value={type.leaveTypeId}>
-                    {type.leaveTypeName} ({type.maxDaysPerYear} days/yr - {type.isPaid ? 'Paid' : 'Unpaid'})
+                  <option
+                    key={type.leaveTypeId}
+                    value={type.leaveTypeId}
+                    disabled={type.availableDays <= 0}
+                  >
+                    {type.availableDays > 0
+                      ? `${type.leaveTypeName} (${type.availableDays} day${type.availableDays === 1 ? '' : 's'} available - ${type.isPaid ? 'Paid' : 'Unpaid'})`
+                      : `${type.leaveTypeName} — 0 days available (${type.isPaid ? 'Paid' : 'Unpaid'})`}
                   </option>
                 ))
               )}
@@ -192,25 +239,37 @@ const LeaveApplicationForm = ({ onSubmit, isLoading = false }) => {
             {/* Selected Category Details Note */}
             {selectedCategory && (
               <div
-                className={`mt-2.5 p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
+                className={`mt-2.5 p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
                   selectedCategory.isPaid
                     ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900'
                     : 'bg-amber-50/60 border-amber-200 text-amber-900'
                 }`}
               >
                 <FiInfo className="w-4 h-4 shrink-0 mt-0.5" />
-                <div className="leading-relaxed">
-                  <span className="font-bold">{selectedCategory.leaveTypeName}</span>: Annual quota of{' '}
-                  <strong>{selectedCategory.maxDaysPerYear} days</strong>.{' '}
-                  {selectedCategory.isPaid ? (
-                    <span>
-                      This is a <strong>Paid Leave</strong> category and will <em>not</em> incur salary deductions upon approval.
+                <div className="leading-relaxed space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-sm">{selectedCategory.leaveTypeName}</span>
+                    <span className="px-2 py-0.5 rounded-md font-semibold text-[11px] bg-white/80 border border-slate-200">
+                      {selectedCategory.isPaid ? 'Paid Leave' : 'Unpaid Leave'}
                     </span>
-                  ) : (
-                    <span>
-                      This is an <strong>Unpaid Leave</strong> category and will trigger proportional <em>salary deductions</em> during monthly payroll.
-                    </span>
-                  )}
+                    {selectedCategory.financialYear && (
+                      <span className="px-2 py-0.5 rounded-md font-medium text-[11px] bg-white/80 border border-slate-200">
+                        FY {selectedCategory.financialYear}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    Annual Quota: <strong>{selectedCategory.annualEntitlement} days</strong> &bull; Current Available Balance:{' '}
+                    <strong className="text-emerald-700">{selectedCategory.availableDays} days</strong>{' '}
+                    (Used: {selectedCategory.approvedDays} days, Pending: {selectedCategory.pendingDays} days).
+                  </div>
+                  <div className="text-[11px] opacity-90">
+                    {selectedCategory.isPaid ? (
+                      <span>This is a <strong>Paid Leave</strong> category and will not incur salary deductions upon approval.</span>
+                    ) : (
+                      <span>This is an <strong>Unpaid Leave</strong> category and will trigger proportional salary deductions during monthly payroll.</span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

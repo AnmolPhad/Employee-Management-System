@@ -150,9 +150,16 @@ const LeaveDashboard = () => {
       {/* Section 1: Leave Balances Overview */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
-            Current Leave Balances
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
+              Current Leave Balances
+            </h2>
+            {balances.length > 0 && balances[0]?.financialYear && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                Financial Year: {balances[0].financialYear}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={loadDashboardData}

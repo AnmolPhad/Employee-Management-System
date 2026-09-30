@@ -77,6 +77,7 @@ axiosClient.interceptors.response.use(
 
     const enhancedError = new Error(friendlyMessage);
     enhancedError.status = status;
+    enhancedError.response = error.response;
     enhancedError.originalData = responseData;
     enhancedError.rawError = error;
 

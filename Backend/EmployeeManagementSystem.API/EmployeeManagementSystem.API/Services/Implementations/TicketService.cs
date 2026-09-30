@@ -403,6 +403,89 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             }
         }
 
+        public async Task<ServiceResult<BulkTicketApprovalResultDto>> ApproveAllMyPendingTicketsAsync(
+            ClaimsPrincipal userPrincipal,
+            CancellationToken cancellationToken = default)
+        {
+            var approver = await GetCurrentEmployeeAsync(userPrincipal, cancellationToken);
+            if (approver is null)
+            {
+                return ServiceResult<BulkTicketApprovalResultDto>.Unauthorized("Authenticated user is not linked to an employee profile.");
+            }
+
+            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+            try
+            {
+                // Fetch all pending tickets assigned to this approver (excluding self if any)
+                var pendingTickets = await _context.Tickets
+                    .Include(t => t.Leave)
+                    .Where(t => t.AssignedToId == approver.EmployeeId 
+                                && t.Status == TicketStatus.Pending 
+                                && t.EmployeeId != approver.EmployeeId)
+                    .ToListAsync(cancellationToken);
+
+                if (pendingTickets.Count == 0)
+                {
+                    return ServiceResult<BulkTicketApprovalResultDto>.Success(
+                        new BulkTicketApprovalResultDto
+                        {
+                            ApprovedCount = 0,
+                            Message = "No pending tickets found to approve."
+                        },
+                        "No pending tickets found to approve.");
+                }
+
+                var now = DateTime.UtcNow;
+                var approvedCount = 0;
+
+                foreach (var ticket in pendingTickets)
+                {
+                    if (ticket.LeaveId.HasValue && ticket.Leave != null)
+                    {
+                        ticket.Leave.Status = LeaveStatus.Approved;
+                        ticket.Leave.ApprovedById = approver.EmployeeId;
+                        ticket.Leave.ApprovedDate = now;
+                    }
+
+                    ticket.Status = TicketStatus.Approved;
+                    ticket.ApprovedAt = now;
+                    ticket.UpdatedAt = now;
+
+                    _context.AuditLogs.Add(new AuditLog
+                    {
+                        UserId = approver.UserId,
+                        Action = "TicketBulkApproved",
+                        EntityName = "Ticket",
+                        EntityId = ticket.TicketId.ToString(),
+                        NewValue = $"Ticket bulk-approved by ApproverId {approver.EmployeeId} at {now:o}",
+                        Timestamp = now
+                    });
+
+                    approvedCount++;
+                }
+
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+
+                _logger.LogInformation("ApproverId {ApproverId} bulk-approved {Count} tickets.",
+                    approver.EmployeeId, approvedCount);
+
+                return ServiceResult<BulkTicketApprovalResultDto>.Success(
+                    new BulkTicketApprovalResultDto
+                    {
+                        ApprovedCount = approvedCount,
+                        Message = $"Successfully approved {approvedCount} leave ticket(s)."
+                    },
+                    $"Successfully approved {approvedCount} leave ticket(s).");
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _logger.LogError(ex, "An error occurred while bulk-approving tickets for ApproverId {ApproverId}.", approver.EmployeeId);
+                throw;
+            }
+        }
+
         public async Task<ServiceResult<TicketResponseDto>> RejectTicketAsync(
             ClaimsPrincipal userPrincipal,
             int ticketId,

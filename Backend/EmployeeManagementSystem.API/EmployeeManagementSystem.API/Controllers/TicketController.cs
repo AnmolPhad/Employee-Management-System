@@ -99,6 +99,19 @@ namespace EmployeeManagementSystem.API.Controllers
         }
 
         /// <summary>
+        /// Approves all pending leave tickets assigned to the authenticated approver.
+        /// </summary>
+        [HttpPost("my-approvals/approve-all")]
+        [ProducesResponseType(typeof(ApiResponse<BulkTicketApprovalResultDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<ActionResult<ApiResponse<BulkTicketApprovalResultDto>>> ApproveAllMyPendingTickets(
+            CancellationToken cancellationToken)
+        {
+            var result = await _ticketService.ApproveAllMyPendingTicketsAsync(User, cancellationToken);
+            return ToActionResult(result);
+        }
+
+        /// <summary>
         /// Rejects a pending ticket with a mandatory rejection reason. Only the assigned approver can reject it.
         /// </summary>
         [HttpPut("{id:int}/reject")]

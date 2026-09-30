@@ -27,6 +27,7 @@ namespace EmployeeManagementSystem.API.Controllers
         [HttpPost("check-in")]
         [ProducesResponseType(typeof(ApiResponse<AttendanceResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<AttendanceResponseDto>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<AttendanceResponseDto>), StatusCodes.Status409Conflict)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<ApiResponse<AttendanceResponseDto>>> CheckIn(
             [FromBody] AttendanceCheckInDto dto,
@@ -42,6 +43,7 @@ namespace EmployeeManagementSystem.API.Controllers
         [HttpPost("check-out")]
         [ProducesResponseType(typeof(ApiResponse<AttendanceResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<AttendanceResponseDto>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<AttendanceResponseDto>), StatusCodes.Status409Conflict)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<ApiResponse<AttendanceResponseDto>>> CheckOut(
             [FromBody] AttendanceCheckOutDto dto,

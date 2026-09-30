@@ -21,6 +21,10 @@ export const ticketApi = {
     return await axiosClient.put(`/api/tickets/${id}/approve`);
   },
 
+  approveAllMyPendingTickets: async () => {
+    return await axiosClient.post('/api/tickets/my-approvals/approve-all');
+  },
+
   rejectTicket: async (id, reason) => {
     return await axiosClient.put(`/api/tickets/${id}/reject`, { reason });
   },
