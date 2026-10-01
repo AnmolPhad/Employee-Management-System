@@ -30,8 +30,31 @@ namespace EmployeeManagementSystem.API.Controllers
             [FromQuery] EmployeeQueryParameters queryParameters,
             CancellationToken cancellationToken)
         {
-            var result = await _employeeService.GetEmployeesAsync(queryParameters, cancellationToken);
+            var result = await _employeeService.GetEmployeesAsync(queryParameters, User, cancellationToken);
             return Ok(ApiResponse<PagedResponse<EmployeeResponseDto>>.Ok(result.Data!, result.Message));
+        }
+
+        [HttpGet("managers")]
+        [ProducesResponseType(typeof(ApiResponse<List<EmployeeResponseDto>>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<ApiResponse<List<EmployeeResponseDto>>>> GetManagerCandidates(
+            CancellationToken cancellationToken)
+        {
+            var result = await _employeeService.GetManagerCandidatesAsync(cancellationToken);
+            return ToActionResult(result);
+        }
+
+        [HttpGet("roles")]
+        [ProducesResponseType(typeof(ApiResponse<List<RoleResponseDto>>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<ApiResponse<List<RoleResponseDto>>>> GetRoles(
+            CancellationToken cancellationToken)
+        {
+            var isCallerAdmin = User.IsInRole(AppRoles.Admin) || User.IsInRole("ADMIN");
+            var result = await _employeeService.GetRolesAsync(isCallerAdmin, cancellationToken);
+            return ToActionResult(result);
         }
 
         [HttpGet("{id:int}")]
@@ -41,21 +64,21 @@ namespace EmployeeManagementSystem.API.Controllers
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<ActionResult<ApiResponse<EmployeeResponseDto>>> GetEmployeeById(int id, CancellationToken cancellationToken)
         {
-            var result = await _employeeService.GetEmployeeByIdAsync(id, cancellationToken);
+            var result = await _employeeService.GetEmployeeByIdAsync(id, User, cancellationToken);
             return ToActionResult(result);
         }
 
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status403Forbidden)]
         [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status409Conflict)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<ActionResult<ApiResponse<EmployeeResponseDto>>> CreateEmployee(
             [FromBody] EmployeeCreateDto dto,
             CancellationToken cancellationToken)
         {
-            var result = await _employeeService.CreateEmployeeAsync(dto, cancellationToken);
+            var result = await _employeeService.CreateEmployeeAsync(dto, User, cancellationToken);
             if (result.Succeeded)
             {
                 return CreatedAtAction(nameof(GetEmployeeById), new { id = result.Data!.EmployeeId }, ApiResponse<EmployeeResponseDto>.Ok(result.Data, result.Message));
@@ -67,16 +90,16 @@ namespace EmployeeManagementSystem.API.Controllers
         [HttpPut("{id:int}")]
         [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status403Forbidden)]
         [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ApiResponse<EmployeeResponseDto>), StatusCodes.Status409Conflict)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<ActionResult<ApiResponse<EmployeeResponseDto>>> UpdateEmployee(
             int id,
             [FromBody] EmployeeUpdateDto dto,
             CancellationToken cancellationToken)
         {
-            var result = await _employeeService.UpdateEmployeeAsync(id, dto, cancellationToken);
+            var result = await _employeeService.UpdateEmployeeAsync(id, dto, User, cancellationToken);
             return ToActionResult(result);
         }
 
@@ -88,7 +111,7 @@ namespace EmployeeManagementSystem.API.Controllers
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> DeleteEmployee(int id, CancellationToken cancellationToken)
         {
-            var result = await _employeeService.DeleteEmployeeAsync(id, cancellationToken);
+            var result = await _employeeService.DeleteEmployeeAsync(id, User, cancellationToken);
             if (result.Succeeded)
             {
                 return NoContent();
@@ -100,6 +123,8 @@ namespace EmployeeManagementSystem.API.Controllers
                 ServiceResultStatus.NotFound => NotFound(response),
                 ServiceResultStatus.Conflict => Conflict(response),
                 ServiceResultStatus.BadRequest => BadRequest(response),
+                ServiceResultStatus.Forbidden => StatusCode(StatusCodes.Status403Forbidden, response),
+                ServiceResultStatus.Unauthorized => StatusCode(StatusCodes.Status401Unauthorized, response),
                 _ => StatusCode(StatusCodes.Status500InternalServerError, response)
             };
         }
@@ -117,6 +142,8 @@ namespace EmployeeManagementSystem.API.Controllers
                 ServiceResultStatus.NotFound => NotFound(response),
                 ServiceResultStatus.BadRequest => BadRequest(response),
                 ServiceResultStatus.Conflict => Conflict(response),
+                ServiceResultStatus.Forbidden => StatusCode(StatusCodes.Status403Forbidden, response),
+                ServiceResultStatus.Unauthorized => StatusCode(StatusCodes.Status401Unauthorized, response),
                 _ => StatusCode(StatusCodes.Status500InternalServerError, response)
             };
         }

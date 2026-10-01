@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using EmployeeManagementSystem.API.Authorization;
 using EmployeeManagementSystem.API.Data;
 using EmployeeManagementSystem.API.DTOs;
@@ -32,9 +33,16 @@ namespace EmployeeManagementSystem.API.Services.Implementations
 
         public async Task<ServiceResult<PagedResponse<EmployeeResponseDto>>> GetEmployeesAsync(
             EmployeeQueryParameters queryParameters,
+            ClaimsPrincipal? user = null,
             CancellationToken cancellationToken = default)
         {
             var query = _context.Employees.AsNoTracking().AsQueryable();
+
+            var isCallerAdmin = user != null && (user.IsInRole(AppRoles.Admin) || user.IsInRole("ADMIN"));
+            if (!isCallerAdmin)
+            {
+                query = query.Where(e => e.RoleId != 1 && (e.Role == null || e.Role.RoleName != "System Administrator"));
+            }
 
             if (!string.IsNullOrWhiteSpace(queryParameters.Search))
             {
@@ -60,6 +68,11 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             if (queryParameters.Status.HasValue)
             {
                 query = query.Where(e => e.EmploymentStatus == queryParameters.Status.Value);
+            }
+
+            if (queryParameters.IsManager.HasValue && queryParameters.IsManager.Value)
+            {
+                query = query.Where(e => e.Role != null && (e.Role.RoleName == "Project Manager" || e.Role.RoleName.EndsWith(" Manager") || e.Role.RoleName == "Manager"));
             }
 
             var totalCount = await query.CountAsync(cancellationToken);
@@ -105,7 +118,10 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             return ServiceResult<PagedResponse<EmployeeResponseDto>>.Success(response, "Employees retrieved successfully.");
         }
 
-        public async Task<ServiceResult<EmployeeResponseDto>> GetEmployeeByIdAsync(int id, CancellationToken cancellationToken = default)
+        public async Task<ServiceResult<EmployeeResponseDto>> GetEmployeeByIdAsync(
+            int id,
+            ClaimsPrincipal? user = null,
+            CancellationToken cancellationToken = default)
         {
             var employee = await _context.Employees
                 .AsNoTracking()
@@ -135,9 +151,25 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 })
                 .FirstOrDefaultAsync(cancellationToken);
 
-            return employee is null
-                ? ServiceResult<EmployeeResponseDto>.NotFound("Employee was not found.")
-                : ServiceResult<EmployeeResponseDto>.Success(employee, "Employee retrieved successfully.");
+            if (employee is null)
+            {
+                return ServiceResult<EmployeeResponseDto>.NotFound("Employee was not found.");
+            }
+
+            if (user != null)
+            {
+                var isCallerAdmin = user.IsInRole(AppRoles.Admin) || user.IsInRole("ADMIN");
+                var isSystemAdmin = employee.RoleId == 1 ||
+                    string.Equals(employee.RoleName, "System Administrator", StringComparison.OrdinalIgnoreCase);
+
+                if (!isCallerAdmin && isSystemAdmin)
+                {
+                    _logger.LogWarning("Unauthorized attempt by non-admin user to access System Administrator profile EmployeeId {EmployeeId}.", id);
+                    return ServiceResult<EmployeeResponseDto>.Forbidden("HR specialists are not authorized to view System Administrator profiles.");
+                }
+            }
+
+            return ServiceResult<EmployeeResponseDto>.Success(employee, "Employee retrieved successfully.");
         }
 
         public async Task<ServiceResult<EmployeeResponseDto>> GetMyProfileAsync(string userId, CancellationToken cancellationToken = default)
@@ -162,11 +194,85 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 return ServiceResult<EmployeeResponseDto>.NotFound("No employee profile is linked to this user account.");
             }
 
-            return await GetEmployeeByIdAsync(employeeId.Value, cancellationToken);
+            return await GetEmployeeByIdAsync(employeeId.Value, cancellationToken: cancellationToken);
         }
 
-        public async Task<ServiceResult<EmployeeResponseDto>> CreateEmployeeAsync(EmployeeCreateDto dto, CancellationToken cancellationToken = default)
+        public async Task<ServiceResult<List<EmployeeResponseDto>>> GetManagerCandidatesAsync(CancellationToken cancellationToken = default)
         {
+            var managers = await _context.Employees
+                .Include(e => e.Role)
+                .Include(e => e.Department)
+                .AsNoTracking()
+                .Where(e => e.EmploymentStatus != EmploymentStatus.Terminated 
+                         && e.EmploymentStatus != EmploymentStatus.Resigned
+                         && e.Role != null 
+                         && (e.Role.RoleName == "Project Manager" 
+                             || e.Role.RoleName.EndsWith(" Manager") 
+                             || e.Role.RoleName == "Manager"))
+                .OrderBy(e => e.FirstName)
+                .ThenBy(e => e.LastName)
+                .Select(e => new EmployeeResponseDto
+                {
+                    EmployeeId = e.EmployeeId,
+                    EmployeeCode = e.EmployeeCode,
+                    FirstName = e.FirstName,
+                    LastName = e.LastName,
+                    FullName = (e.FirstName + " " + e.LastName).Trim(),
+                    Email = e.Email,
+                    Phone = e.Phone,
+                    DateOfBirth = e.DateOfBirth,
+                    Gender = e.Gender,
+                    Address = e.Address,
+                    DateOfJoining = e.DateOfJoining,
+                    DepartmentId = e.DepartmentId,
+                    DepartmentName = e.Department != null ? e.Department.DepartmentName : null,
+                    RoleId = e.RoleId,
+                    RoleName = e.Role != null ? e.Role.RoleName : null,
+                    ManagerId = e.ManagerId,
+                    ManagerName = e.Manager != null ? (e.Manager.FirstName + " " + e.Manager.LastName).Trim() : null,
+                    EmploymentStatus = e.EmploymentStatus,
+                    CreatedAt = e.CreatedAt,
+                    UpdatedAt = e.UpdatedAt
+                })
+                .ToListAsync(cancellationToken);
+
+            return ServiceResult<List<EmployeeResponseDto>>.Success(managers, "Manager candidates retrieved successfully.");
+        }
+
+        public async Task<ServiceResult<List<RoleResponseDto>>> GetRolesAsync(bool includeAdminRole = true, CancellationToken cancellationToken = default)
+        {
+            var query = _context.AppRoles.AsNoTracking().Where(r => r.IsActive);
+            if (!includeAdminRole)
+            {
+                query = query.Where(r => r.RoleName != "System Administrator");
+            }
+
+            var roles = await query
+                .OrderBy(r => r.RoleId)
+                .Select(r => new RoleResponseDto
+                {
+                    RoleId = r.RoleId,
+                    RoleName = r.RoleName,
+                    Description = r.Description
+                })
+                .ToListAsync(cancellationToken);
+
+            return ServiceResult<List<RoleResponseDto>>.Success(roles, "Roles retrieved successfully.");
+        }
+
+        public async Task<ServiceResult<EmployeeResponseDto>> CreateEmployeeAsync(EmployeeCreateDto dto, ClaimsPrincipal? user = null, CancellationToken cancellationToken = default)
+        {
+            var isCallerAdmin = user != null && (user.IsInRole(AppRoles.Admin) || user.IsInRole("ADMIN"));
+            var targetRole = await _context.AppRoles.FirstOrDefaultAsync(r => r.RoleId == dto.RoleId, cancellationToken);
+            if (targetRole != null && targetRole.RoleName.Equals("System Administrator", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!isCallerAdmin)
+                {
+                    _logger.LogWarning("Unauthorized attempt by non-admin user to assign System Administrator role during employee creation.");
+                    return ServiceResult<EmployeeResponseDto>.Forbidden("HR specialists are not authorized to assign the System Administrator role.");
+                }
+            }
+
             var validationResult = await ValidateEmployeeDtoAsync(dto.EmployeeCode, dto.Email, dto.DepartmentId, dto.RoleId, dto.ManagerId, dto.DateOfBirth, dto.DateOfJoining, dto.Gender, dto.EmploymentStatus, null, cancellationToken);
             if (!validationResult.Succeeded)
             {
@@ -235,7 +341,7 @@ namespace EmployeeManagementSystem.API.Services.Implementations
 
                 await transaction.CommitAsync(cancellationToken);
 
-                var createdEmployee = await GetEmployeeByIdAsync(employee.EmployeeId, cancellationToken);
+                var createdEmployee = await GetEmployeeByIdAsync(employee.EmployeeId, user, cancellationToken);
                 return ServiceResult<EmployeeResponseDto>.Success(createdEmployee.Data!, "Employee created successfully.");
             }
             catch (Exception ex)
@@ -246,12 +352,32 @@ namespace EmployeeManagementSystem.API.Services.Implementations
             }
         }
 
-        public async Task<ServiceResult<EmployeeResponseDto>> UpdateEmployeeAsync(int id, EmployeeUpdateDto dto, CancellationToken cancellationToken = default)
+        public async Task<ServiceResult<EmployeeResponseDto>> UpdateEmployeeAsync(int id, EmployeeUpdateDto dto, ClaimsPrincipal? user = null, CancellationToken cancellationToken = default)
         {
-            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.EmployeeId == id, cancellationToken);
+            var employee = await _context.Employees.Include(e => e.Role).FirstOrDefaultAsync(e => e.EmployeeId == id, cancellationToken);
             if (employee is null)
             {
                 return ServiceResult<EmployeeResponseDto>.NotFound("Employee was not found.");
+            }
+
+            var isCallerAdmin = user != null && (user.IsInRole(AppRoles.Admin) || user.IsInRole("ADMIN"));
+            var targetRole = await _context.AppRoles.FirstOrDefaultAsync(r => r.RoleId == dto.RoleId, cancellationToken);
+            if (targetRole != null && targetRole.RoleName.Equals("System Administrator", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!isCallerAdmin)
+                {
+                    _logger.LogWarning("Unauthorized attempt by non-admin user to assign System Administrator role to EmployeeId {EmployeeId}.", id);
+                    return ServiceResult<EmployeeResponseDto>.Forbidden("HR specialists are not authorized to assign the System Administrator role.");
+                }
+            }
+
+            if (employee.Role != null && employee.Role.RoleName.Equals("System Administrator", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!isCallerAdmin)
+                {
+                    _logger.LogWarning("Unauthorized attempt by non-admin user to modify System Administrator EmployeeId {EmployeeId}.", id);
+                    return ServiceResult<EmployeeResponseDto>.Forbidden("HR specialists are not authorized to modify a System Administrator employee profile.");
+                }
             }
 
             var validationResult = await ValidateEmployeeDtoAsync(dto.EmployeeCode, dto.Email, dto.DepartmentId, dto.RoleId, dto.ManagerId, dto.DateOfBirth, dto.DateOfJoining, dto.Gender, dto.EmploymentStatus, id, cancellationToken);
@@ -288,16 +414,36 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                 await _userManager.UpdateAsync(linkedUser);
             }
 
-            var updatedEmployee = await GetEmployeeByIdAsync(id, cancellationToken);
+            var updatedEmployee = await GetEmployeeByIdAsync(id, user, cancellationToken);
             return ServiceResult<EmployeeResponseDto>.Success(updatedEmployee.Data!, "Employee updated successfully.");
         }
 
-        public async Task<ServiceResult<EmployeeResponseDto>> UpdatePersonalDetailsAsync(int id, EmployeePersonalUpdateDto dto, CancellationToken cancellationToken = default)
+        public async Task<ServiceResult<EmployeeResponseDto>> UpdatePersonalDetailsAsync(
+            int id,
+            EmployeePersonalUpdateDto dto,
+            ClaimsPrincipal? user = null,
+            CancellationToken cancellationToken = default)
         {
-            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.EmployeeId == id, cancellationToken);
+            var employee = await _context.Employees
+                .Include(e => e.Role)
+                .FirstOrDefaultAsync(e => e.EmployeeId == id, cancellationToken);
+
             if (employee is null)
             {
                 return ServiceResult<EmployeeResponseDto>.NotFound("Employee was not found.");
+            }
+
+            if (user != null)
+            {
+                var isCallerAdmin = user.IsInRole(AppRoles.Admin) || user.IsInRole("ADMIN");
+                var isSystemAdmin = employee.RoleId == 1 ||
+                    (employee.Role != null && string.Equals(employee.Role.RoleName, "System Administrator", StringComparison.OrdinalIgnoreCase));
+
+                if (!isCallerAdmin && isSystemAdmin)
+                {
+                    _logger.LogWarning("Unauthorized attempt by non-admin user to update System Administrator personal details EmployeeId {EmployeeId}.", id);
+                    return ServiceResult<EmployeeResponseDto>.Forbidden("HR specialists are not authorized to modify System Administrator personal details.");
+                }
             }
 
             if (dto.DateOfBirth.HasValue && dto.DateOfBirth.Value.Date > DateTime.Today)
@@ -313,16 +459,35 @@ namespace EmployeeManagementSystem.API.Services.Implementations
 
             await _context.SaveChangesAsync(cancellationToken);
 
-            var updatedEmployee = await GetEmployeeByIdAsync(id, cancellationToken);
+            var updatedEmployee = await GetEmployeeByIdAsync(id, user, cancellationToken);
             return ServiceResult<EmployeeResponseDto>.Success(updatedEmployee.Data!, "Personal information updated successfully.");
         }
 
-        public async Task<ServiceResult<bool>> DeleteEmployeeAsync(int id, CancellationToken cancellationToken = default)
+        public async Task<ServiceResult<bool>> DeleteEmployeeAsync(
+            int id,
+            ClaimsPrincipal? user = null,
+            CancellationToken cancellationToken = default)
         {
-            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.EmployeeId == id, cancellationToken);
+            var employee = await _context.Employees
+                .Include(e => e.Role)
+                .FirstOrDefaultAsync(e => e.EmployeeId == id, cancellationToken);
+
             if (employee is null)
             {
                 return ServiceResult<bool>.NotFound("Employee was not found.");
+            }
+
+            if (user != null)
+            {
+                var isCallerAdmin = user.IsInRole(AppRoles.Admin) || user.IsInRole("ADMIN");
+                var isSystemAdmin = employee.RoleId == 1 ||
+                    (employee.Role != null && string.Equals(employee.Role.RoleName, "System Administrator", StringComparison.OrdinalIgnoreCase));
+
+                if (!isCallerAdmin && isSystemAdmin)
+                {
+                    _logger.LogWarning("Unauthorized attempt by non-admin user to delete System Administrator EmployeeId {EmployeeId}.", id);
+                    return ServiceResult<bool>.Forbidden("HR specialists are not authorized to delete System Administrator profiles.");
+                }
             }
 
             var deleteBlockReason = await GetDeleteBlockReasonAsync(id, cancellationToken);
@@ -451,10 +616,28 @@ namespace EmployeeManagementSystem.API.Services.Implementations
                     return ServiceResult<bool>.BadRequest("An employee cannot be their own manager.");
                 }
 
-                var managerExists = await _context.Employees.AnyAsync(e => e.EmployeeId == managerId.Value, cancellationToken);
-                if (!managerExists)
+                var manager = await _context.Employees
+                    .Include(e => e.Role)
+                    .FirstOrDefaultAsync(e => e.EmployeeId == managerId.Value, cancellationToken);
+
+                if (manager is null)
                 {
-                    return ServiceResult<bool>.BadRequest("Manager does not exist.");
+                    return ServiceResult<bool>.BadRequest("Selected manager does not exist.");
+                }
+
+                if (manager.EmploymentStatus == EmploymentStatus.Terminated || manager.EmploymentStatus == EmploymentStatus.Resigned)
+                {
+                    return ServiceResult<bool>.BadRequest("Selected reporting manager is inactive or no longer employed.");
+                }
+
+                var isManagerQualified = manager.Role != null && 
+                    (manager.Role.RoleName.Equals("Project Manager", StringComparison.OrdinalIgnoreCase) ||
+                     manager.Role.RoleName.EndsWith(" Manager", StringComparison.OrdinalIgnoreCase) ||
+                     manager.Role.RoleName.Equals("Manager", StringComparison.OrdinalIgnoreCase));
+
+                if (!isManagerQualified)
+                {
+                    return ServiceResult<bool>.BadRequest($"Employee '{manager.FullName}' with role '{manager.Role?.RoleName}' does not qualify as a Reporting Manager. Only employees with a managerial role can be assigned as Reporting Manager.");
                 }
             }
 

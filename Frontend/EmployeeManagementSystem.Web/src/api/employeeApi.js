@@ -9,6 +9,14 @@ export const employeeApi = {
     return await axiosClient.get(`/api/employees/${id}`);
   },
 
+  getRoles: async () => {
+    return await axiosClient.get('/api/admin/employees/roles');
+  },
+
+  getManagerCandidates: async () => {
+    return await axiosClient.get('/api/admin/employees/managers');
+  },
+
   createEmployee: async (data) => {
     return await axiosClient.post('/api/admin/employees', data);
   },

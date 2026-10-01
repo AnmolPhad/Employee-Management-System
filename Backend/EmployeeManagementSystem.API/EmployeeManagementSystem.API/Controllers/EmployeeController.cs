@@ -67,7 +67,7 @@ namespace EmployeeManagementSystem.API.Controllers
                 }
             }
 
-            var result = await _employeeService.GetEmployeeByIdAsync(id, cancellationToken);
+            var result = await _employeeService.GetEmployeeByIdAsync(id, User, cancellationToken);
             return ToActionResult(result);
         }
 
@@ -95,7 +95,7 @@ namespace EmployeeManagementSystem.API.Controllers
                 }
             }
 
-            var result = await _employeeService.UpdatePersonalDetailsAsync(id, dto, cancellationToken);
+            var result = await _employeeService.UpdatePersonalDetailsAsync(id, dto, User, cancellationToken);
             return ToActionResult(result);
         }
 
@@ -112,6 +112,8 @@ namespace EmployeeManagementSystem.API.Controllers
                 ServiceResultStatus.NotFound => NotFound(response),
                 ServiceResultStatus.BadRequest => BadRequest(response),
                 ServiceResultStatus.Conflict => Conflict(response),
+                ServiceResultStatus.Forbidden => StatusCode(StatusCodes.Status403Forbidden, response),
+                ServiceResultStatus.Unauthorized => StatusCode(StatusCodes.Status401Unauthorized, response),
                 _ => StatusCode(StatusCodes.Status500InternalServerError, response)
             };
         }

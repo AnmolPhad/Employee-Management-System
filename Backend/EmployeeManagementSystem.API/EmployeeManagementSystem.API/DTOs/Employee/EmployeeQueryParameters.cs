@@ -24,5 +24,6 @@ namespace EmployeeManagementSystem.API.DTOs.Employee
         public int? DepartmentId { get; set; }
         public int? RoleId { get; set; }
         public EmploymentStatus? Status { get; set; }
+        public bool? IsManager { get; set; }
     }
 }

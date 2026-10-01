@@ -4,6 +4,7 @@ import { FiUser, FiBriefcase, FiLock, FiSave, FiArrowLeft, FiAlertCircle } from 
 import Button from '../common/Button';
 import departmentApi from '../../api/departmentApi';
 import employeeApi from '../../api/employeeApi';
+import { useAuth } from '../../context/AuthContext';
 import { SYSTEM_ROLES, EMPLOYMENT_STATUSES, GENDERS, ROUTES } from '../../utils/constants';
 
 const formatInputDate = (dateVal) => {
@@ -25,9 +26,11 @@ const EmployeeForm = ({
   currentEmployeeId = null,
 }) => {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   const [departments, setDepartments] = useState([]);
   const [managers, setManagers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [dropdownLoading, setDropdownLoading] = useState(false);
   const [formError, setFormError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
@@ -71,14 +74,15 @@ const EmployeeForm = ({
     }
   }, [initialData]);
 
-  // Load departments and candidate managers
+  // Load departments, valid candidate managers, and business roles
   useEffect(() => {
     const loadDropdownData = async () => {
       setDropdownLoading(true);
       try {
-        const [deptRes, empRes] = await Promise.all([
-          departmentApi.getDepartments({ pageSize: 100 }),
-          employeeApi.getEmployees({ pageSize: 100 }),
+        const [deptRes, mgrRes, roleRes] = await Promise.all([
+          departmentApi.getDepartments({ pageSize: 100 }).catch(() => null),
+          employeeApi.getManagerCandidates().catch(() => null),
+          employeeApi.getRoles().catch(() => null),
         ]);
 
         if (deptRes && deptRes.data) {
@@ -88,11 +92,29 @@ const EmployeeForm = ({
           setDepartments(deptList);
         }
 
-        if (empRes && empRes.data) {
-          const empList = Array.isArray(empRes.data)
-            ? empRes.data
-            : empRes.data.items || [];
-          setManagers(empList);
+        if (mgrRes && mgrRes.data) {
+          const mgrList = Array.isArray(mgrRes.data)
+            ? mgrRes.data
+            : mgrRes.data.items || mgrRes.data || [];
+          setManagers(mgrList);
+        } else {
+          // Fallback manager query using isManager filter
+          try {
+            const fallbackRes = await employeeApi.getEmployees({ isManager: true, pageSize: 100 });
+            const fallbackList = Array.isArray(fallbackRes?.data)
+              ? fallbackRes.data
+              : fallbackRes?.data?.items || [];
+            setManagers(fallbackList);
+          } catch (e) {
+            console.warn('Fallback manager fetch failed:', e);
+          }
+        }
+
+        if (roleRes && roleRes.data) {
+          const roleList = Array.isArray(roleRes.data)
+            ? roleRes.data
+            : roleRes.data.items || roleRes.data || [];
+          setRoles(roleList);
         }
       } catch (err) {
         console.error('Failed to load dropdown data:', err);
@@ -182,14 +204,30 @@ const EmployeeForm = ({
     try {
       await onSubmit(payload);
     } catch (err) {
-      setFormError(err.message || 'Failed to save employee record.');
+      setFormError(err.response?.data?.message || err.message || 'Failed to save employee record.');
     }
   };
+
+  // Determine available business roles/designations based on logged-in user permissions
+  const rawRoles = roles.length > 0 ? roles : SYSTEM_ROLES;
+  const availableRoles = rawRoles.filter((r) => {
+    const roleName = r.roleName || r.name || '';
+    // HR is prohibited from selecting System Administrator
+    if (!isAdmin && roleName.toLowerCase() === 'system administrator') {
+      return false;
+    }
+    return true;
+  });
 
   // Filter manager options (cannot report to oneself)
   const availableManagers = managers.filter(
     (m) => !currentEmployeeId || m.employeeId !== Number(currentEmployeeId)
   );
+
+  // Check if existing manager is not in the valid manager candidates list
+  const isExistingManagerInvalid =
+    Boolean(formData.managerId) &&
+    !availableManagers.some((m) => String(m.employeeId) === String(formData.managerId));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -250,7 +288,7 @@ const EmployeeForm = ({
               <option value="">Select Department</option>
               {departments.map((dept) => (
                 <option key={dept.departmentId} value={dept.departmentId}>
-                  {dept.departmentName} ({dept.departmentCode})
+                  {dept.departmentName} ({dept.departmentCode || `ID: ${dept.departmentId}`})
                 </option>
               ))}
             </select>
@@ -259,7 +297,7 @@ const EmployeeForm = ({
             )}
           </div>
 
-          {/* Role */}
+          {/* Role / Designation */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
               Role / Designation <span className="text-rose-500">*</span>
@@ -268,14 +306,15 @@ const EmployeeForm = ({
               name="roleId"
               value={formData.roleId}
               onChange={handleChange}
+              disabled={dropdownLoading}
               className={`w-full px-3.5 py-2 text-sm bg-white border rounded-xl text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${
                 validationErrors.roleId ? 'border-rose-400 bg-rose-50/20' : 'border-slate-300'
               }`}
             >
               <option value="">Select Role</option>
-              {SYSTEM_ROLES.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
+              {availableRoles.map((role) => (
+                <option key={role.roleId || role.id} value={role.roleId || role.id}>
+                  {role.roleName || role.name}
                 </option>
               ))}
             </select>
@@ -294,15 +333,27 @@ const EmployeeForm = ({
               value={formData.managerId}
               onChange={handleChange}
               disabled={dropdownLoading}
-              className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3.5 py-2 text-sm bg-white border rounded-xl text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 ${
+                isExistingManagerInvalid ? 'border-amber-400 bg-amber-50/20' : 'border-slate-300'
+              }`}
             >
               <option value="">None (Top-Level)</option>
+              {isExistingManagerInvalid && (
+                <option value={formData.managerId} disabled className="text-amber-700 font-medium">
+                  {initialData?.managerName || `Manager ID: ${formData.managerId}`} (Invalid Assignment — Please Reassign)
+                </option>
+              )}
               {availableManagers.map((mgr) => (
                 <option key={mgr.employeeId} value={mgr.employeeId}>
-                  {mgr.fullName || `${mgr.firstName} ${mgr.lastName}`} ({mgr.employeeCode})
+                  {mgr.fullName || `${mgr.firstName} ${mgr.lastName}`}{mgr.roleName ? ` — ${mgr.roleName}` : ''}
                 </option>
               ))}
             </select>
+            {isExistingManagerInvalid && (
+              <p className="text-xs text-amber-600 mt-1">
+                Current reporting manager does not qualify as a manager. Please reassign to a valid Project Manager.
+              </p>
+            )}
           </div>
 
           {/* Employment Status */}

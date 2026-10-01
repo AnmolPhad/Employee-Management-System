@@ -267,7 +267,7 @@ const EmployeeList = () => {
             className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-xl text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-xs"
           >
             <option value="">All Roles</option>
-            {SYSTEM_ROLES.map((r) => (
+            {SYSTEM_ROLES.filter((r) => isAdmin || r.id !== 1).map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
